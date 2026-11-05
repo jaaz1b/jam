@@ -404,7 +404,7 @@
 		<div class="absolute inset-0 bg-gradient-to-b from-transparent to-background"></div>
 	</div>
 
-	<h1 class="px-6 pt-10 font-heading text-4xl font-bold tracking-tight">{t('common.search')}</h1>
+	<h1 data-page-title class="px-6 pt-10 font-heading text-4xl font-bold tracking-tight">{t('common.search')}</h1>
 
 	<div class="h-px" {@attach stickWatch}></div>
 	<div

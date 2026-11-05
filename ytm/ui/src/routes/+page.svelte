@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { onMount, untrack } from 'svelte';
+	import { phone } from '$lib/phone';
 	import { fade } from 'svelte/transition';
 	import { goto } from '$app/navigation';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
@@ -540,9 +541,13 @@
 		transition:fade={{ duration: 150 }}
 		onclick={() => scroller?.scrollTo({ top: 0, behavior: 'smooth' })}
 		aria-label={t('a11y.back_to_top')}
-		class="fixed right-6 z-10 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-110 {playback.now
-			? 'bottom-24'
-			: 'bottom-6'}"
+		class="fixed right-6 z-10 flex h-11 w-11 cursor-pointer items-center justify-center rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-110 {phone
+			? playback.now
+				? 'right-4 bottom-[148px]'
+				: 'right-4 bottom-[84px]'
+			: playback.now
+				? 'bottom-24'
+				: 'bottom-6'}"
 	>
 		<HugeiconsIcon icon={ArrowUpBigIcon} class="h-5 w-5" />
 	</button>

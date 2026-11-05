@@ -7,6 +7,7 @@
 	// through to that form's onsubmit, which is where each caller decides what a full search means
 	// (run it in place, or navigate to /search).
 	import { HugeiconsIcon } from '@hugeicons/svelte';
+	import { phone } from '$lib/phone';
 	import {
 		Search01Icon,
 		HistoryIcon,
@@ -159,7 +160,7 @@
 	<!-- Advertises the palette, which searches the same thing from anywhere in the app
 	     (shortcuts.ts). Out of the way once there is a query to read, and never a click target:
 	     the field behind it is the target. -->
-	{#if !value}
+	{#if !value && !phone}
 		<kbd
 			class="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 rounded border bg-muted px-1.5 py-0.5 font-mono text-[0.625rem] font-medium tracking-wide text-muted-foreground"
 		>

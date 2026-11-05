@@ -10,6 +10,7 @@
 	// lets go (`onValueCommit`, ColorPicker's `onchange`). A click on a swatch or a palette is one
 	// write too.
 	import { untrack, type Snippet } from 'svelte';
+	import { phone } from '$lib/phone';
 	import { open } from '@tauri-apps/plugin-dialog';
 	import { mode, setMode, userPrefersMode } from 'mode-watcher';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
@@ -395,11 +396,13 @@
 					desc: t('settings.themes.zoom_hint'),
 					control: zoomStepper
 				})}
+				{#if !phone}
 				{@render row({
 					title: t('settings.themes.app_icon'),
 					desc: t('settings.themes.app_icon_hint'),
 					control: appIconButtons
 				})}
+				{/if}
 				{@render row({
 					title: t('settings.themes.blur_playlist_header'),
 					desc: t('settings.themes.blur_playlist_header_hint'),

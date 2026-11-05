@@ -6,6 +6,7 @@
 	import { auth, personal, playback } from '$lib/player.svelte';
 	import { thumb } from '$lib/thumb';
 	import { t, type TranslationKey } from '$lib/i18n.svelte';
+	import { phone } from '$lib/phone';
 
 	// Fixed at mount — a greeting that flips mid-session is uncanny.
 	const hour = new Date().getHours();
@@ -78,7 +79,7 @@
 		></div>
 	</div>
 
-	<div class="flex items-center justify-between gap-6 px-6 pb-4 pt-10">
+	<div class="flex items-center justify-between gap-6 {phone ? 'px-4 pt-3 pb-3' : 'px-6 pb-4 pt-10'}">
 		<div class="flex min-w-0 items-center gap-4">
 			{#if auth.account?.signedIn && auth.account.thumbnail}
 				<!-- max-width:none defeats Tailwind Preflight's `img{max-width:100%}`, which in a tight box
@@ -91,11 +92,12 @@
 					class="shrink-0 rounded-full object-cover shadow-md"
 				/>
 			{/if}
-			<h1 class="truncate font-heading text-4xl font-bold tracking-tight drop-shadow-sm">
+			<h1 class="truncate font-heading {phone ? 'text-[28px]' : 'text-4xl'} font-bold tracking-tight drop-shadow-sm">
 				{daypart}{auth.account?.name ? `, ${auth.account.name.split(' ')[0]}` : ''}
 			</h1>
 		</div>
-		<div class="flex shrink-0 items-center gap-2">
+		<!-- Jam for Android: search and history live in the top bar and the More tab. -->
+		<div class="flex shrink-0 items-center gap-2" class:hidden={phone}>
 			<!-- Listen Together moved out of here and lives on the titlebar alone: history is the thing
 			     you reach for from the home page. -->
 			<button

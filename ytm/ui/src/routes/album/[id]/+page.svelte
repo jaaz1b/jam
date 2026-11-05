@@ -1,5 +1,6 @@
 <script lang="ts">
     import { page } from "$app/state";
+	import { phone } from '$lib/phone';
     import { goto } from "$app/navigation";
     import { HugeiconsIcon } from "@hugeicons/svelte";
     import {
@@ -343,7 +344,7 @@
             {/if}
 
             <!-- Controls -->
-            <div class="relative flex items-center gap-3">
+            <div class="relative flex items-center gap-3 {phone ? 'flex-wrap gap-y-2 [&_button]:whitespace-nowrap' : ''}">
                 <button
                     class="flex cursor-pointer items-center gap-2 rounded-full text-foreground bg-primary px-6 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
                     onclick={() => playAll(null)}

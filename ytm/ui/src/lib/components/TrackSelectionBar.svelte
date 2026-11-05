@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { fly } from 'svelte/transition';
+	import { phone } from '$lib/phone';
 	import { cubicOut } from 'svelte/easing';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import {
@@ -98,7 +99,7 @@
 {#if selection.active}
 	<div
 		transition:fly={{ y: 16, duration: 220, easing: cubicOut }}
-		class="fixed bottom-24 left-1/2 z-40 flex max-w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-1 rounded-2xl border bg-card px-2 py-2 shadow-lg"
+		class="fixed {phone ? 'bottom-[148px]' : 'bottom-24'} left-1/2 z-40 flex max-w-[min(44rem,calc(100vw-2rem))] -translate-x-1/2 flex-col gap-1 rounded-2xl border bg-card px-2 py-2 shadow-lg"
 		data-track-selection
 	>
 		<div class="flex flex-wrap items-center justify-center gap-1" role="group" aria-label={t('selection.actions')}>

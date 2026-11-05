@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/state';
+	import { phone } from '$lib/phone';
 	import { goto } from '$app/navigation';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import {
@@ -240,7 +241,7 @@
 					{expanded ? t('common.less') : t('common.more')}
 				</button>
 			{/if}
-			<div class="mt-5 flex items-center gap-3">
+			<div class="mt-5 flex items-center gap-3 {phone ? 'flex-wrap gap-y-2 [&_button]:whitespace-nowrap' : ''}">
 				<button
 					class="flex items-center gap-2 rounded-full bg-foreground px-5 py-2.5 text-sm font-semibold text-background transition hover:opacity-90 disabled:opacity-50"
 					onclick={shuffle}

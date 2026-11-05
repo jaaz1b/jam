@@ -17,6 +17,7 @@
 	import { goto } from '$app/navigation';
 	import { anySaved, isLiked, openAddManyToPlaylist, ratingOf, savedPlaylists, toast, toggleRating } from '$lib/player.svelte';
 	import { addedLabel, addedTitle, CELL, END, TITLE, type TrackColumn } from '$lib/trackcolumns';
+	import { phone } from '$lib/phone';
 	import { tagOf } from '$lib/stats';
 	import { myPlays } from './TrackColumns.svelte';
 	import SavedInPlaylists from './SavedInPlaylists.svelte';
@@ -155,7 +156,8 @@
 	const rated = $derived(ratingOf(song));
 	// A local file has no YouTube identity, so there is nothing to rate (the same guard the ⋯ menu
 	// applies to its like item). The compact variant has no room: it keeps its single heart.
-	const showRating = $derived(!compact && !hideRating && !api.isLocalId(song.video_id));
+	// Jam for Android: no hover on a phone, so no hover-revealed thumbs; liking is in the ⋮ menu.
+	const showRating = $derived(!phone && !compact && !hideRating && !api.isLocalId(song.video_id));
 
 	// Your own playlists holding this song, for the "saved" mark. Gated on `showRating` because it
 	// answers the same three questions: a local file is in no YTM playlist, and the compact and
@@ -494,7 +496,7 @@
 			{playlistId}
 			{queueIndex}
 			{inLibraryList}
-			triggerClass="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-accent/20 hover:text-foreground {compact
+			triggerClass="cursor-pointer rounded-md p-1.5 text-muted-foreground hover:bg-accent/20 hover:text-foreground {compact || phone
 				? ''
 				: 'invisible group-focus-within:visible group-hover:visible'}"
 		/>

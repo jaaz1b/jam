@@ -1516,3 +1516,8 @@ input[type='range'].range:active::-webkit-slider-thumb {
 		scroll-behavior: auto !important;
 	}
 }
+
+/* Jam for Android: the phone shell's top bar names the page, so the pages' own big titles step aside. */
+html.jam-android [data-page-title] {
+	display: none;
+}

@@ -7,6 +7,7 @@
 // metadata.rs) and off the rows of a playlist kept on this machine. Nothing offers a release date:
 // no row carries one.
 import type { SongItem } from './api';
+import { phone } from './phone.ts';
 
 export type TrackColumn = 'album' | 'added' | 'by' | 'plays' | 'mine' | 'duration';
 
@@ -32,7 +33,8 @@ export const DEFAULT_COLUMNS: TrackColumn[] = ['album', 'added', 'by', 'plays', 
  * as the window.
  */
 export const TITLE = 'flex-[4_1_0%]';
-export const END = 'w-44 justify-end';
+// Jam for Android: no fixed end column on a phone; the row ends with the length and the ⋮.
+export const END = phone ? 'justify-end' : 'w-44 justify-end';
 export const CELL: Record<Exclude<TrackColumn, 'duration'>, string> = {
 	album: 'min-w-0 flex-[3_1_0%]',
 	added: 'w-28 shrink-0',
@@ -56,7 +58,8 @@ const MIN_PX: Partial<Record<TrackColumn, number>> = { album: 640, mine: 704, ad
  * short. `ui/perf/endprobe.py` measures it.
  */
 export const fitColumns = (cols: TrackColumn[], px: number): TrackColumn[] =>
-	cols.filter((c) => px >= (MIN_PX[c] ?? 0));
+	// A phone keeps the title readable: nothing between it and the length.
+	phone ? cols.filter((c) => c === 'duration') : cols.filter((c) => px >= (MIN_PX[c] ?? 0));
 
 /**
  * The columns this list can fill. An album page leaves Album out: every row would repeat the title

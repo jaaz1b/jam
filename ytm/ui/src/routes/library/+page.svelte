@@ -153,7 +153,7 @@
 
 <div class="p-6">
 	<div class="mb-6 flex items-center justify-between">
-		<h1 class="font-heading text-2xl font-bold">{t('library.title')}</h1>
+		<h1 data-page-title class="font-heading text-2xl font-bold">{t('library.title')}</h1>
 		<div class="flex items-center gap-2">
 			<!-- Only with something to push: saves made before signing in, which live on this
 			     machine until this button puts them on the account. -->

@@ -239,7 +239,7 @@
 		</div>
 
 		<div class="flex flex-wrap items-center justify-between gap-4 px-6 pt-10">
-			<h1 class="font-heading text-2xl font-bold tracking-tight">{t('stats.title')}</h1>
+			<h1 data-page-title class="font-heading text-2xl font-bold tracking-tight">{t('stats.title')}</h1>
 			{#if stats?.firstAt}
 				<Tabs.Root value={range} onValueChange={(v) => (range = v as Range)}>
 					<Tabs.List>

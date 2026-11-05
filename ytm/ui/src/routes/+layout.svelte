@@ -51,6 +51,12 @@
 	import VideoSurface from '$lib/components/VideoSurface.svelte';
 	import CommandPalette from '$lib/components/CommandPalette.svelte';
 	import KeyboardShortcuts from '$lib/components/KeyboardShortcuts.svelte';
+	import { phone } from '$lib/phone';
+	import MobileTopBar from '$lib/components/mobile/MobileTopBar.svelte';
+	import MobileNav from '$lib/components/mobile/MobileNav.svelte';
+	import MobileMiniPlayer from '$lib/components/mobile/MobileMiniPlayer.svelte';
+	import MobileNowPlaying from '$lib/components/mobile/MobileNowPlaying.svelte';
+	import MoreSheet from '$lib/components/mobile/MoreSheet.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { auth, initApp, np, playback, prefs, ui } from '$lib/player.svelte';
 	import { isLocalId } from '$lib/api';
@@ -210,6 +216,30 @@
      and no toasts (a banner would cover most of a 560x180 widget). -->
 {#if isMini}
 	<MiniPlayer />
+{:else if phone}
+	<!-- Jam for Android: the phone shell. Pages, dialogs and menus are the same as on desktop; the
+	     frame around them is a phone's: a slim top bar, bottom tabs, a docked mini player and a
+	     full-screen player. -->
+	<div data-app-shell class="relative flex h-[100dvh] flex-col overflow-hidden bg-background text-foreground">
+		<MobileTopBar />
+		<main
+			data-app-main
+			class="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+			bind:this={scroller}
+		>
+			{#key `${auth.epoch}:${ui.epoch}`}
+				{@render children()}
+			{/key}
+		</main>
+		{#if !prefs.nativeVideo}<VideoSurface />{/if}
+		{#if playback.now}
+			<div in:fly={{ y: 64, duration: 250, easing: cubicOut }}><MobileMiniPlayer /></div>
+		{/if}
+		<MobileNav />
+	</div>
+	{#if np.open && playback.now}<MobileNowPlaying />{/if}
+	{#if ui.theaterOpen && playback.now}<TheaterMode />{/if}
+	<MoreSheet />
 {:else}
 	<!-- The window itself is transparent; this root paints the background and, when not maximized,
 	     rounds the corners (the compositor can't round an undecorated window for us on Linux).
@@ -308,8 +338,12 @@
 	     closes it (and leaves fullscreen) when the queue runs out. -->
 	{#if ui.theaterOpen && playback.now}<TheaterMode />{/if}
 
-	<CommandPalette />
-	<KeyboardShortcuts />
+{/if}
+{#if !isMini}
+	{#if !phone}
+		<CommandPalette />
+		<KeyboardShortcuts />
+	{/if}
 	<AddToPlaylist />
 	<NewPlaylistDialog />
 	<ShareDialog />

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tick, untrack, type Snippet } from 'svelte';
+	import { phone } from '$lib/phone';
 	import { save } from '@tauri-apps/plugin-dialog';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import {
@@ -17,7 +18,8 @@
 		Globe02Icon,
 		ArrowDown01Icon,
 		Alert02Icon,
-		LinkSquare02Icon
+		LinkSquare02Icon,
+		ArrowLeft01Icon,
 	} from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
 	import { Input } from '$lib/components/ui/input';
@@ -64,7 +66,8 @@
 		{ id: 'general', label: t('settings.tabs.general'), hint: t('settings.tabs.general_hint'), icon: Settings02Icon },
 		{ id: 'themes', label: t('settings.tabs.themes'), hint: t('settings.tabs.themes_hint'), icon: PaintBoardIcon },
 		{ id: 'playback', label: t('settings.tabs.playback'), hint: t('settings.tabs.playback_hint'), icon: PlayCircleIcon },
-		{ id: 'hotkeys', label: t('settings.tabs.hotkeys'), hint: t('settings.tabs.hotkeys_hint'), icon: KeyboardIcon },
+		// Jam for Android: a phone has no global shortcuts.
+		...(phone ? [] : [{ id: 'hotkeys' as const, label: t('settings.tabs.hotkeys'), hint: t('settings.tabs.hotkeys_hint'), icon: KeyboardIcon }]),
 		...((globalThis as any).__TAURI_INTERNALS__?.__jam ? [] : [{ id: 'discord' as const, label: t('settings.tabs.discord'), hint: t('settings.tabs.discord_hint'), icon: DiscordIcon }]),
 		{ id: 'scrobbling', label: t('settings.tabs.scrobbling'), hint: t('settings.tabs.scrobbling_hint'), icon: LastFmIcon },
 		{ id: 'data', label: t('settings.tabs.data'), hint: t('settings.tabs.data_hint'), icon: Database02Icon },
@@ -79,6 +82,8 @@
 	const CARD = 'divide-y divide-border/60 overflow-hidden rounded-xl border bg-card';
 
 	let tab = $state<TabId>('general');
+	// Jam for Android: on a phone the tab list is its own screen, and a tab opens over it.
+	let phoneList = $state(true);
 	const currentTab = $derived(TABS.find((tb) => tb.id === tab) ?? TABS[0]);
 	const shortcutsHint = $derived(t('settings.general.shortcuts_hint').split('{key}'));
 	const currentLocaleLabel = $derived(
@@ -119,6 +124,7 @@
 	$effect(() => {
 		if (!ui.settingsOpen) return;
 		untrack(() => {
+			phoneList = !ui.settingsFocus;
 			// Opened on a section from elsewhere (the lyrics source picker): its tab, scrolled to it
 			// once the tab has rendered. The Last.fm menu and "Edit scrobble" open a whole tab.
 			if (ui.settingsFocus === 'scrobbling') {
@@ -480,20 +486,25 @@
 	     transitioning the width relayouts the whole modal every frame, and WebKitGTK is the webview
 	     that would pay for it. -->
 	<Dialog.Content
-		class="gap-0 overflow-hidden p-0 {tab === 'discord' || tab === 'scrobbling' || tab === 'themes' ? 'sm:max-w-5xl' : tab === 'hotkeys' ? 'sm:max-w-4xl' : 'sm:max-w-3xl'}"
+		class="gap-0 overflow-hidden p-0 {phone
+			? 'h-[100dvh] max-w-none rounded-none sm:max-w-none'
+			: tab === 'discord' || tab === 'scrobbling' || tab === 'themes' ? 'sm:max-w-5xl' : tab === 'hotkeys' ? 'sm:max-w-4xl' : 'sm:max-w-3xl'}"
 	>
 		<Dialog.Description class="sr-only">{t('settings.title')}</Dialog.Description>
 
-		<div class="flex min-w-0 h-[min(38rem,80vh)]">
+		<div class="flex min-w-0 {phone ? 'h-full' : 'h-[min(38rem,80vh)]'}">
 			<!-- Tab rail -->
-			<nav data-settings-nav class="flex w-52 shrink-0 flex-col border-r bg-muted/40 p-3">
+			<nav data-settings-nav class="{phone ? (phoneList ? 'flex w-full' : 'hidden') : 'flex w-52 border-r bg-muted/40'} shrink-0 flex-col p-3">
 				<Dialog.Title class="px-3 pt-1 pb-4 font-heading text-base font-semibold">
 					{t('settings.title')}
 				</Dialog.Title>
 				<div class="flex flex-col gap-0.5">
 					{#each TABS as tb (tb.id)}
 						<button
-							onclick={() => (tab = tb.id)}
+							onclick={() => {
+								tab = tb.id;
+								phoneList = false;
+							}}
 							aria-current={tab === tb.id}
 							class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors {tab ===
 							tb.id
@@ -517,12 +528,22 @@
 
 			<!-- Content pane. min-w-0: a flex child's min-width is auto, so without it one wide row
 			     (a long font name, a long path) widens the pane and pushes every tab off the modal. -->
-			<div class="flex min-w-0 flex-1 flex-col">
+			<div class="{phone && phoneList ? 'hidden' : 'flex'} min-w-0 flex-1 flex-col">
 				<!-- h-14 also keeps the dialog's close button clear of the first row. -->
 				<header
 					data-settings-header
-					class="flex h-14 shrink-0 flex-col justify-center border-b px-6 pr-14"
+					class="flex h-14 shrink-0 flex-col justify-center border-b px-6 pr-14 {phone ? 'relative pl-14' : ''}"
 				>
+					{#if phone}
+						<button
+							type="button"
+							onclick={() => (phoneList = true)}
+							class="absolute top-1/2 left-2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full active:bg-muted"
+							aria-label={t('common.back')}
+						>
+							<HugeiconsIcon icon={ArrowLeft01Icon} size={20} />
+						</button>
+					{/if}
 					<h2 class="text-sm font-semibold">{currentTab.label}</h2>
 					<p class="truncate text-xs text-muted-foreground">{currentTab.hint}</p>
 				</header>
@@ -543,6 +564,7 @@
 					{:else if tab === 'general'}
 						<!-- The shortcuts list has no other entry point in the chrome. Closing settings
 						     first: two stacked dialogs would trap focus in the wrong one. -->
+{#if !phone}
 						<button
 							type="button"
 							class="mb-5 inline-flex items-center gap-2 rounded-full border bg-muted/50 px-3 py-1 text-xs text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
@@ -557,6 +579,7 @@
 									''}</span
 							>
 						</button>
+{/if}
 						<section class={GROUP}>
 							<h3 class={LABEL}>{t('settings.sections.language')}</h3>
 							<div data-settings-card class={CARD}>
@@ -581,6 +604,8 @@
 						<section class={GROUP}>
 							<h3 class={LABEL}>{t('settings.sections.system')}</h3>
 							<div data-settings-card class={CARD}>
+								<!-- Jam for Android: no tray, and the media notification already follows the song. -->
+								{#if !phone}
 								{@render row({
 									title: t('settings.general.close_to_tray'),
 									desc: t('settings.general.close_to_tray_hint'),
@@ -591,7 +616,8 @@
 									desc: t('settings.general.track_notifications_hint'),
 									control: trackNotificationsSwitch
 								})}
-								{#if trackNotificationsOn}
+								{/if}
+								{#if trackNotificationsOn && !phone}
 									{@render row({
 										title: t('settings.general.track_notifications_focused'),
 										desc: t('settings.general.track_notifications_focused_hint'),
@@ -603,19 +629,21 @@
 									desc: t('settings.general.play_on_start_hint'),
 									control: playOnStartSwitch
 								})}
+								{#if !phone}
 								{@render row({
 									title: t('settings.general.autostart'),
 									desc: t('settings.general.autostart_hint'),
 									control: autostartSwitch
 								})}
-								{#if autostartOn}
+								{/if}
+								{#if autostartOn && !phone}
 									{@render row({
 										title: t('settings.general.start_minimized'),
 										desc: t('settings.general.start_minimized_hint'),
 										control: startMinimizedSwitch
 									})}
 								{/if}
-								{#if !systemTitlebarFixed}
+								{#if !systemTitlebarFixed && !phone}
 									{@render row({
 										title: t('settings.general.system_titlebar'),
 										desc: t('settings.general.system_titlebar_hint'),

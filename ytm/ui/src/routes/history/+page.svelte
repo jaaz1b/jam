@@ -5,6 +5,7 @@
 	// each bucket keeps a sticky heading with its own count and the rows sit under it as ordinary
 	// TrackRows. One queue is built from every bucket at once, so Play all runs the whole history.
 	import { onMount } from 'svelte';
+	import { phone } from '$lib/phone';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import { HistoryIcon, PlayIcon, ShuffleIcon } from '@hugeicons/core-free-icons';
 	import { Button } from '$lib/components/ui/button';
@@ -158,8 +159,8 @@
 						<HugeiconsIcon icon={HistoryIcon} class="h-8 w-8" />
 					</div>
 				{/if}
-				<div class="min-w-0 flex-1">
-					<h1 class="font-heading text-2xl font-bold tracking-tight">{t('history.title')}</h1>
+				<div class="min-w-0 flex-1 {phone ? 'basis-full' : ''}">
+					<h1 data-page-title class="font-heading text-2xl font-bold tracking-tight">{t('history.title')}</h1>
 					<p class="mt-0.5 text-sm text-muted-foreground">
 						{filtering
 							? t('history.matching', { count: matchCount.toLocaleString() })

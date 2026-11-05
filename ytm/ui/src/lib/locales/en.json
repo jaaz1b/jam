@@ -139,7 +139,9 @@
 		"saved_accounts_hint": "Pick a saved account to switch to it.",
 		"history": "History",
 		"stats": "Stats",
-		"no_channels": "YouTube did not return any selectable channels."
+		"no_channels": "YouTube did not return any selectable channels.",
+		"more": "More",
+		"import": "Import playlists"
 	},
 	"player": {
 		"play": "Play",
@@ -209,7 +211,9 @@
 		"add_to_playlist": "Add to playlist",
 		"pin_to_top": "Pin to top",
 		"unpin": "Unpin",
-		"scroll_to_end": "Scroll to bottom"
+		"scroll_to_end": "Scroll to bottom",
+		"effects": "Speed & pitch",
+		"close_player": "Close player"
 	},
 	"home": {
 		"good_morning": "Good morning",
