@@ -663,6 +663,13 @@ class MainActivity : TauriActivity() {
         @JavascriptInterface fun retry() { main.post { views[sourceId]?.let { retry(it) } } }
         @JavascriptInterface fun switchTo(id: String) { main.post { switchSource(id) } }
         @JavascriptInterface fun openSettings() { main.post { startActivity(Intent(this@MainActivity, SettingsActivity::class.java)) } }
+        /** An offline-capable app's service-worker status (assets/installed-app.js), kept for the offline page. */
+        @JavascriptInterface fun offlineStatus(json: String?) {
+            if (json != null && json.length < 8000 && Sources.exists(sourceId) && Sources.byId(sourceId).offlineApp) {
+                Prefs.setSecret("offline.$sourceId", json)
+            }
+        }
+        @JavascriptInterface fun offlineStatusFor(id: String): String = Prefs.secret("offline.$id") ?: ""
         @JavascriptInterface fun sources(): String =
             JSONArray(Sources.all().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }).toString()
     }

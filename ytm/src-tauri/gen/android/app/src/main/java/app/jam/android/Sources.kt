@@ -69,6 +69,7 @@ object Sources {
                 id = c.optString("id"), name = c.optString("name"), url = url,
                 domains = listOf(baseHost(url)) + extra, color = c.optString("color", PALETTE[0]),
                 desktopSite = c.optBoolean("desktopSite", false), custom = true, editableLink = true, extraDomains = extra,
+                offlineApp = c.optBoolean("offlineApp", false),
             )
         }
         return list
@@ -130,6 +131,7 @@ object Sources {
         val item = JSONObject()
             .put("id", newId).put("name", name).put("url", url).put("color", color)
             .put("desktopSite", input.optBoolean("desktopSite", false))
+            .put("offlineApp", input.optBoolean("offlineApp", false))
             .put("extraDomains", JSONArray(normalizeDomains(input.optString("extraDomains"))))
         val out = JSONArray()
         var replaced = false
@@ -157,4 +159,5 @@ object Sources {
         .put("custom", s.custom).put("editableLink", s.editableLink).put("customUrl", s.customUrl)
         .put("defaultUrl", s.defaultUrl ?: JSONObject.NULL).put("desktopSite", s.desktopSite)
         .put("extraDomains", JSONArray(s.extraDomains)).put("active", s.id == active).put("engine", s.engine)
+        .put("offlineApp", s.offlineApp)
 }

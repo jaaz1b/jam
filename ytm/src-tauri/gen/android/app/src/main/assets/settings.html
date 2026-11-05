@@ -526,7 +526,7 @@
     const url = field('Link', src ? src.url : '', 'https://…', 'mono');
     url.inputMode = 'url';
     let color = src ? src.color : p.palette[(p.sources.filter((x) => x.custom).length) % p.palette.length];
-    let domains = null, desktop = null;
+    let domains = null, desktop = null, offline = null;
     if (!builtin) {
       const sw = document.createElement('div'); sw.className = 'f';
       const l = document.createElement('label'); l.textContent = 'Color';
@@ -546,8 +546,11 @@
       const dl = document.createElement('label'); dl.className = 'check';
       desktop = document.createElement('input'); desktop.type = 'checkbox'; desktop.checked = !!(src && src.desktopSite);
       dl.append(desktop, document.createTextNode(' Ask for the desktop site (for players that only work on computers)'));
-      inner.append(il, domains, dl); adv.appendChild(inner); box.appendChild(adv);
-      if (src && ((src.extraDomains && src.extraDomains.length) || src.desktopSite)) adv.open = true;
+      const ol = document.createElement('label'); ol.className = 'check';
+      offline = document.createElement('input'); offline.type = 'checkbox'; offline.checked = !!(src && src.offlineApp);
+      ol.append(offline, document.createTextNode(' Works offline when installed (a web app with an offline mode, like Octave)'));
+      inner.append(il, domains, dl, ol); adv.appendChild(inner); box.appendChild(adv);
+      if (src && ((src.extraDomains && src.extraDomains.length) || src.desktopSite || src.offlineApp)) adv.open = true;
     }
     const err = document.createElement('div'); err.className = 'err'; box.appendChild(err);
     const bar = document.createElement('div'); bar.className = 'bar';
@@ -573,6 +576,7 @@
       const r = call('saveSource', JSON.stringify({
         id: src ? src.id : '', name: name ? name.value : '', url: url.value, color,
         extraDomains: domains ? domains.value : '', desktopSite: desktop ? desktop.checked : false,
+        offlineApp: offline ? offline.checked : false,
       }));
       if (r.error) { err.textContent = r.error; return; }
       editing = null;

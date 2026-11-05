@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Jam offline test</title></head>
+<body style="background:#111;color:#eee;font:18px sans-serif;padding:24px">
+<h1>Offline web app test</h1>
+<p>Used by Jam's automated Android test. A service worker keeps this page, as Octave's does; the
+test stops the server and reopens Jam.</p>
+<p id="s" style="font-size:24px">…</p>
+<script>
+  const s = document.getElementById('s');
+  const show = () => {
+    const c = navigator.serviceWorker && navigator.serviceWorker.controller;
+    s.textContent = (c ? 'Served with the service worker' : 'No service worker in control') + ' · ' + (navigator.onLine ? 'online' : 'offline') + ' · ' + new Date().toLocaleTimeString();
+  };
+  if (navigator.serviceWorker) navigator.serviceWorker.register('sw.js').then(show, (e) => { s.textContent = 'register failed: ' + e; });
+  else s.textContent = 'This WebView has no service workers';
+  navigator.serviceWorker && navigator.serviceWorker.addEventListener('controllerchange', show);
+  show();
+</script>
+</body>
+</html>

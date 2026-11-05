@@ -32,6 +32,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Jam"
         android:usesCleartextTraffic="${usesCleartextTraffic}"
+        android:networkSecurityConfig="@xml/network_security_config"
         tools:targetApi="36">
 
         <activity

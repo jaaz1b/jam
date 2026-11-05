@@ -71,6 +71,32 @@ for link in "browse/MPREb_K8qWMWVqXGi album" "channel/UClYV6hHlupm_S_ObS1W-DYw a
   adb shell input swipe 540 1600 540 700 300; sleep 2; shot "$(printf %02d $n)-ytm-$2-scrolled"; n=$((n+1))
 done
 
+# Offline web app (what Octave relies on): a test site with a service worker, served from this
+# machine at http://localhost:8000 (adb reverse), opened as a Jam source marked "works offline",
+# then opened again with its server gone. It should still load, from the service worker.
+python3 -m http.server 8000 --directory "$(dirname "$0")" </dev/null >/dev/null 2>&1 &
+SERVER=$!
+adb shell am force-stop "$PKG"
+timeout 30 adb root </dev/null >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
+adb reverse tcp:8000 tcp:8000 >/dev/null
+python3 - > "$OUT/jam-offline.xml" <<'PY'
+import json
+from xml.sax.saxutils import escape
+s = {"customSources": [{"id": "c_offlinetest", "name": "Offline test", "url": "http://localhost:8000/offline-pwa/",
+                        "color": "#22c55e", "desktopSite": False, "offlineApp": True, "extraDomains": []}],
+     "defaultSource": "c_offlinetest", "openLastSource": False}
+print("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name=\"settings\">" + escape(json.dumps(s), {'"': "&quot;"}) + "</string>\n</map>")
+PY
+adb push "$OUT/jam-offline.xml" /data/local/tmp/jam.xml >/dev/null
+adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam.xml $D/shared_prefs/jam.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam.xml; chmod 660 $D/shared_prefs/jam.xml; restorecon -R $D/shared_prefs'
+timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
+sleep 15; shot "$(printf %02d $n)-offline-app-online"; n=$((n+1))
+kill "$SERVER" 2>/dev/null; sleep 1
+adb shell am force-stop "$PKG"
+timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
+sleep 12; shot "$(printf %02d $n)-offline-app-server-gone"; n=$((n+1))
+summary "Offline web app status: $(adb shell "grep -o 'secret.offline.c_offlinetest[^<]*' /data/data/$PKG/shared_prefs/jam.xml" 2>/dev/null | head -c 600)"
+
 # Logs: the engine's own (limusic.log) and logcat.
 timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
 for f in $(adb shell "find /data/data/$PKG /data/user/0/$PKG -name 'limusic.log*' 2>/dev/null" | tr -d '\r' | sort -u); do
