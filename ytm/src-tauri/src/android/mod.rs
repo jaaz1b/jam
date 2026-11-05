@@ -63,6 +63,38 @@ pub fn open_browser(app: &AppHandle, url: &str) -> Result<(), String> {
     Ok(())
 }
 
+/// Hands the process's JavaVM and the application context to `ndk-context`, where the player
+/// crate reads them for FFmpeg (mpv's AudioTrack output). tao has them but, unlike android-activity,
+/// doesn't publish them there. Call from setup, before the player starts. Once per process.
+pub fn init_jvm() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        let Some(ctx) = tao::platform::android::prelude::main_android_context() else {
+            tracing::error!("no Android context yet; audio output may not start");
+            return;
+        };
+        let result = (|| -> jni::errors::Result<*mut std::ffi::c_void> {
+            // SAFETY: tao's pointers: the process JavaVM and a global ref to the activity.
+            let vm = unsafe { jni::JavaVM::from_raw(ctx.java_vm.cast()) }?;
+            let mut env = vm.attach_current_thread()?;
+            let activity = unsafe { jni::objects::JObject::from_raw(ctx.context_jobject.cast()) };
+            let app = env
+                .call_method(&activity, "getApplicationContext", "()Landroid/content/Context;", &[])?
+                .l()?;
+            // The application context outlives any activity; FFmpeg keeps it for the process.
+            let global = env.new_global_ref(app)?;
+            let raw = global.as_obj().as_raw() as *mut std::ffi::c_void;
+            std::mem::forget(global);
+            Ok(raw)
+        })();
+        match result {
+            // SAFETY: called once, with the live JavaVM and a global ref that is never deleted.
+            Ok(app_ctx) => unsafe { ndk_context::initialize_android_context(ctx.java_vm, app_ctx) },
+            Err(e) => tracing::error!(error = %e, "could not get the application context"),
+        }
+    });
+}
+
 /// The app handle, for the few places (Last.fm's browser hop) that have none to pass down.
 pub fn set_app(app: &AppHandle) {
     let _ = APP.set(app.clone());

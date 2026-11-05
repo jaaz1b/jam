@@ -23,6 +23,6 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 name = "play"
 
 # Jam for Android: mpv's Android audio output (AudioTrack) reaches Java through FFmpeg's JNI hook,
-# which needs the process's JavaVM. tao already initializes ndk-context.
+# which needs the process's JavaVM. The engine fills ndk-context at startup (android/mod.rs).
 [target.'cfg(target_os = "android")'.dependencies]
 ndk-context = "0.1"

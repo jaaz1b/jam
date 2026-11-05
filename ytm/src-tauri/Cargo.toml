@@ -85,6 +85,13 @@ souvlaki = { version = "0.8.3", default-features = false, features = ["use_zbus"
 notify-rust = "4"
 tauri-plugin-window-state = "2.4.1"
 
+# Jam for Android: handing FFmpeg (mpv's AudioTrack output) the JavaVM and the app context. Tauri's
+# tao holds them; ndk-context is where the player crate reads them. Same versions tao uses.
+[target.'cfg(target_os = "android")'.dependencies]
+tao = "0.35"
+jni = "0.21"
+ndk-context = "0.1"
+
 [dev-dependencies]
 # Mock runtime for the IPC guard test (lib.rs `only_ui`).
 tauri = { version = "2", features = ["test"] }

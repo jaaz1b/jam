@@ -33,8 +33,9 @@ mod android {
         static ONCE: Once = Once::new();
         ONCE.call_once(|| {
             let ctx = ndk_context::android_context();
-            // SAFETY: both pointers come from ndk-context, which tao fills with the process's
-            // JavaVM and a global reference to the activity; FFmpeg only stores them.
+            // SAFETY: both pointers come from ndk-context, which the engine fills at startup with
+            // the process's JavaVM and a global reference to the application context; FFmpeg only
+            // stores them.
             unsafe {
                 av_jni_set_java_vm(ctx.vm(), std::ptr::null_mut());
                 if !ctx.context().is_null() {

@@ -750,7 +750,10 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             #[cfg(target_os = "android")]
-            android::set_app(&handle);
+            {
+                android::set_app(&handle);
+                android::init_jvm();
+            }
 
             // GtkSettings belongs to the main thread, which is where setup runs (#481).
             #[cfg(target_os = "linux")]
