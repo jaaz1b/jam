@@ -18,5 +18,27 @@ fn main() {
     // leaves `generate_context!` emitting the old `default_window_icon` (window, tray, taskbar).
     println!("cargo:rerun-if-changed=icons");
 
-    tauri_build::build()
+    // Jam for Android: its own capability set, because the desktop one grants permissions of
+    // plugins that are not built for Android (updater, global shortcuts), which tauri-build rejects.
+    let mut attrs = tauri_build::Attributes::new();
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+        println!("cargo:rerun-if-changed=capabilities-android");
+        attrs = attrs.capabilities_path_pattern("./capabilities-android/*.json");
+        // libmpv and the FFmpeg libraries it needs, built by android/libmpv and unpacked into the
+        // app's jniLibs (they ship in the APK from there). Linked from here, not RUSTFLAGS, because
+        // the Tauri CLI sets RUSTFLAGS for Android builds and that would drop a target flag.
+        let abi = match std::env::var("CARGO_CFG_TARGET_ARCH").as_deref() {
+            Ok("aarch64") => "arm64-v8a",
+            Ok("x86_64") => "x86_64",
+            Ok("arm") => "armeabi-v7a",
+            _ => "x86",
+        };
+        let dir = std::env::var("JAM_LIBMPV_DIR").map(std::path::PathBuf::from).unwrap_or_else(|_| {
+            std::path::Path::new(&std::env::var("CARGO_MANIFEST_DIR").unwrap())
+                .join("gen/android/app/src/main/jniLibs")
+        });
+        println!("cargo:rerun-if-env-changed=JAM_LIBMPV_DIR");
+        println!("cargo:rustc-link-search=native={}", dir.join(abi).display());
+    }
+    tauri_build::try_build(attrs).expect("tauri-build failed")
 }

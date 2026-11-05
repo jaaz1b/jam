@@ -19,13 +19,16 @@ mod listentogether;
 mod local;
 mod lyrics;
 mod matugen;
+#[cfg_attr(target_os = "android", path = "android/media.rs")]
 mod media;
+#[cfg_attr(target_os = "android", path = "android/mini.rs")]
 mod mini;
 #[cfg(target_os = "linux")]
 mod nativevideo;
 #[cfg(windows)]
 #[path = "nativevideo_windows.rs"]
 mod nativevideo;
+#[cfg_attr(target_os = "android", path = "android/notify.rs")]
 mod notify;
 mod orchestrator;
 mod potoken;
@@ -36,10 +39,15 @@ mod state;
 mod stats;
 #[cfg(target_os = "windows")]
 mod taskbar;
+#[cfg_attr(target_os = "android", path = "android/tray.rs")]
 mod tray;
 mod jamhost;
 mod videoproxy;
+#[cfg_attr(target_os = "android", path = "android/webview.rs")]
 mod webview;
+/// Jam for Android: the bridge to the Android app around the engine (android/mod.rs).
+#[cfg(target_os = "android")]
+mod android;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -388,6 +396,7 @@ fn release_on_destroy(webview: &tauri::Webview) {
 ///
 /// Wayland gives the app no real position and ignores `center`, which is fine: the compositor
 /// places the window there, so the bug cannot happen.
+#[cfg(not(target_os = "android"))]
 fn keep_on_screen(w: &tauri::WebviewWindow) {
     let (Ok(p), Ok(size)) = (w.outer_position(), w.outer_size()) else { return };
     if mini::on_a_display(w, p, size) {
@@ -406,7 +415,6 @@ fn keep_on_screen(w: &tauri::WebviewWindow) {
     }
 }
 
-#[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Logs to stdout **and** to `<app data>/limusic.log`, truncated each launch (the previous run is
 /// kept as `limusic.log.1`).
 ///
@@ -570,6 +578,7 @@ fn should_start_minimized(db: &Db) -> bool {
         && tray::available()
 }
 
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 /// Tauri entry point. Applies the platform boot fixes (open-fd limit, NVIDIA/WebKit env), restores
 /// the persisted session, wires every command and plugin, and runs the event loop. context/01
 /// §startup.
@@ -662,6 +671,7 @@ pub fn run() {
     //
     //     LIMUSIC_MULTI=1 XDG_DATA_HOME=/tmp/limusic-b ./target/debug/limusic-app
     // In Jam, Jam owns the engine's lifecycle and runs exactly one (jamhost.rs).
+    #[cfg(not(target_os = "android"))]
     if std::env::var_os("LIMUSIC_MULTI").is_none() && !jamhost::active() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             tray::show_main(app);
@@ -682,6 +692,44 @@ pub fn run() {
         );
     }
 
+    // Desktop-only plugins. Jam for Android has its own bridge plugin instead (android/mod.rs).
+    #[cfg(not(target_os = "android"))]
+    {
+        builder = builder
+            .plugin(tauri_plugin_updater::Builder::new().build())
+            .plugin(tauri_plugin_autostart::init(
+                tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+                Some(vec!["--autostart"]),
+            ))
+            // Reopen at the size/position the window was left at. Only "main": the mini widget is
+            // fixed-size and the login/cipher/PoToken webviews are windows too. Size, position and
+            // maximized only — VISIBLE would restore a window hidden to the tray as invisible, and
+            // DECORATIONS would fight the custom titlebar.
+            .plugin(
+                tauri_plugin_window_state::Builder::new()
+                    .with_state_flags(
+                        tauri_plugin_window_state::StateFlags::SIZE
+                            | tauri_plugin_window_state::StateFlags::POSITION
+                            | tauri_plugin_window_state::StateFlags::MAXIMIZED,
+                    )
+                    .with_filter(|label| label == "main")
+                    .build(),
+            )
+            .plugin(
+                tauri_plugin_global_shortcut::Builder::new()
+                    .with_handler(|app, shortcut, event| {
+                        if let Some(mgr) = app.try_state::<Arc<hotkeys::HotkeysManager>>() {
+                            mgr.handle_event(app, shortcut, event.state());
+                        }
+                    })
+                    .build(),
+            );
+    }
+    #[cfg(target_os = "android")]
+    {
+        builder = builder.plugin(android::init());
+    }
+
     builder
         // The hidden cipher webview's document (webview.rs). A registered scheme, because a
         // `data:` URL is not a document WebView2 will navigate to.
@@ -691,7 +739,6 @@ pub fn run() {
                 .body(webview::HARNESS_HTML.as_bytes())
                 .expect("static harness response")
         })
-        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         // Folder picker for the local-music library (local.rs).
         .plugin(tauri_plugin_dialog::init())
@@ -700,35 +747,10 @@ pub fn run() {
         // Fedora every copy button in the app silently did nothing. The OS clipboard from the app
         // process has no such gate. See ui/src/lib/clipboard.ts.
         .plugin(tauri_plugin_clipboard_manager::init())
-        .plugin(tauri_plugin_autostart::init(
-            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            Some(vec!["--autostart"]),
-        ))
-        // Reopen at the size/position the window was left at. Only "main": the mini widget is
-        // fixed-size and the login/cipher/PoToken webviews are windows too. Size, position and
-        // maximized only — VISIBLE would restore a window hidden to the tray as invisible, and
-        // DECORATIONS would fight the custom titlebar.
-        .plugin(
-            tauri_plugin_window_state::Builder::new()
-                .with_state_flags(
-                    tauri_plugin_window_state::StateFlags::SIZE
-                        | tauri_plugin_window_state::StateFlags::POSITION
-                        | tauri_plugin_window_state::StateFlags::MAXIMIZED,
-                )
-                .with_filter(|label| label == "main")
-                .build(),
-        )
-        .plugin(
-            tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, shortcut, event| {
-                    if let Some(mgr) = app.try_state::<Arc<hotkeys::HotkeysManager>>() {
-                        mgr.handle_event(app, shortcut, event.state());
-                    }
-                })
-                .build(),
-        )
         .setup(|app| {
             let handle = app.handle().clone();
+            #[cfg(target_os = "android")]
+            android::set_app(&handle);
 
             // GtkSettings belongs to the main thread, which is where setup runs (#481).
             #[cfg(target_os = "linux")]
@@ -798,14 +820,27 @@ pub fn run() {
                     config.visible = false;
                     config.skip_taskbar = true;
                 }
+                // Jam for Android: the webview is the screen, shown from the start, and the SPA
+                // learns it is on a phone before any of its code runs (see `android::INIT_SCRIPT`).
+                #[cfg(target_os = "android")]
+                {
+                    config.visible = true;
+                }
                 let mut builder = tauri::WebviewWindowBuilder::from_config(&handle, &config)?;
                 if jamhost::active() {
                     builder = builder.initialization_script(jamhost::init_script());
                 }
+                #[cfg(target_os = "android")]
+                {
+                    builder = builder.initialization_script(android::INIT_SCRIPT);
+                }
                 let w = http::proxied(builder).build()?;
+                #[cfg(not(target_os = "android"))]
                 if !jamhost::active() {
                     keep_on_screen(&w);
                 }
+                #[cfg(target_os = "android")]
+                let _ = w;
             }
             let cookie = db.get_setting("session_cookie").filter(|s| !s.is_empty());
             let data_sync_id = state::persisted_data_sync_id(&db);
@@ -897,7 +932,7 @@ pub fn run() {
 
             // Discord rich presence — off unless the user opted in; parks on its channel until then.
             // In Jam, Jam itself shows one Discord presence for every source.
-            let discord = if jamhost::active() {
+            let discord = if jamhost::active() || cfg!(target_os = "android") {
                 None
             } else {
                 discord::spawn(
@@ -957,6 +992,7 @@ pub fn run() {
             // pointing at nothing. So an installed build repoints an existing entry at itself.
             // Only an existing one: `is_enabled` is false after a Task Manager disable on Windows,
             // and that choice is the user's.
+            #[cfg(not(target_os = "android"))]
             if !tauri::is_dev() {
                 use tauri_plugin_autostart::ManagerExt;
                 let al = app.autolaunch();
@@ -1136,7 +1172,7 @@ pub fn run() {
             // is created undecorated, so this is the one place that reverses it; macOS never gets
             // here, its traffic lights come from `tauri.macos.conf.json`. Done before the SPA shows
             // the window, so the frame is already there rather than popping in.
-            #[cfg(not(target_os = "macos"))]
+            #[cfg(not(any(target_os = "macos", target_os = "android")))]
             if system_titlebar {
                 if let Some(w) = app.get_webview_window("main") {
                     let _ = w.set_decorations(true);
@@ -1147,6 +1183,7 @@ pub fn run() {
             // is already applied by then (#45). Safety net: if the frontend never gets that far,
             // show it anyway rather than leaving the app with no window at all. Not when starting
             // in the tray, where the hidden window is the point.
+            #[cfg(not(target_os = "android"))]
             if let Some(w) = app.get_webview_window("main").filter(|_| !jamhost::active()) {
                 if !should_start_minimized(&db) {
                     tauri::async_runtime::spawn(async move {

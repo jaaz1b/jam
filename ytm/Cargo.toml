@@ -33,3 +33,7 @@ listen-protocol = { path = "crates/listen-protocol" }
 lto = "thin"
 codegen-units = 1
 strip = "symbols"
+
+# Jam for Android: rquickjs-sys with Android bindings (see vendor/rquickjs-sys/ANDROID.md).
+[patch.crates-io]
+rquickjs-sys = { path = "vendor/rquickjs-sys" }

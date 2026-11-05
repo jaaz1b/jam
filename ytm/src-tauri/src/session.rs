@@ -11,8 +11,11 @@ use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use tauri::webview::cookie::Cookie;
+#[cfg(not(target_os = "android"))]
 use tauri::webview::PageLoadEvent;
-use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
+#[cfg(not(target_os = "android"))]
+use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter};
 
 use crate::state::{AppState, SignInOutcome};
 
@@ -57,6 +60,7 @@ const LOGIN_URL: &str =
 const ADD_ACCOUNT_URL: &str =
     "https://accounts.google.com/AddSession?service=youtube&continue=https://music.youtube.com/";
 
+#[cfg(not(target_os = "android"))]
 /// Open the login webview. Returns immediately; sign-in completes asynchronously (the UI learns via
 /// the `auth-changed` event, or `login-error` on failure). `add_account` picks the AddSession
 /// flow so an additional Google account can be added while another is signed in.
@@ -143,6 +147,7 @@ pub fn open_login(app: AppHandle, state: Arc<AppState>, add_account: bool) {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 /// WebGL off in the Google webviews, as it already is in the main window (`tune_webview`).
 ///
 /// accounts.google.com opens a WebGL context the moment "Next" is clicked, and music.youtube.com
@@ -168,6 +173,7 @@ fn no_webgl(win: &tauri::WebviewWindow) {
     let _ = win;
 }
 
+#[cfg(not(target_os = "android"))]
 /// Re-mint the stored cookie from the login webview's own Google session, with no user
 /// interaction. Issue #165 / KI-2.
 ///
@@ -287,6 +293,7 @@ fn claim_refresh() -> bool {
     true
 }
 
+#[cfg(not(target_os = "android"))]
 /// Delete every google.com / youtube.com cookie from the webview's cookie store (one shared store
 /// for all of the app's webviews). Only the webview-side Google session is lost: the app's saved
 /// accounts are SQLite rows in `Db`, and the main window never sends YouTube cookies itself.
@@ -313,6 +320,7 @@ fn clear_google_webview_cookies(app: &AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[cfg(not(target_os = "android"))]
 /// Merge the youtube-domain cookies into a `Cookie` header string. Reads the platform cookie store
 /// (HttpOnly + secure included), matching what a browser sends to music.youtube.com.
 ///
@@ -333,6 +341,7 @@ async fn read_login_cookies(app: &AppHandle, label: &'static str) -> String {
     rx.await.unwrap_or_default()
 }
 
+#[cfg(not(target_os = "android"))]
 fn youtube_cookies(app: &AppHandle, label: &str) -> String {
     let Some(wv) = app.get_webview_window(label) else { return String::new() };
     let Ok(cookies) = wv.cookies() else { return String::new() };
@@ -403,10 +412,12 @@ mod tests {
     }
 }
 
+#[cfg(not(target_os = "android"))]
 fn close_login(app: &AppHandle) {
     close(app, LOGIN_LABEL)
 }
 
+#[cfg(not(target_os = "android"))]
 fn close(app: &AppHandle, label: &'static str) {
     let app2 = app.clone();
     let _ = app.run_on_main_thread(move || {
@@ -414,4 +425,82 @@ fn close(app: &AppHandle, label: &'static str) {
             let _ = w.destroy();
         }
     });
+}
+
+// ---- Jam for Android ------------------------------------------------------------------------
+//
+// Android has one webview per Tauri app, so the sign-in page and the refresh visit run in Android
+// WebViews that `JamPlugin.kt` owns. They share the app's cookie store, as desktop's login window
+// shares the main webview's. Kotlin hands back the youtube.com cookies as a `Cookie` header; from
+// there it is the same sign-in path as desktop.
+
+#[cfg(target_os = "android")]
+#[derive(serde::Deserialize)]
+struct CookieReply {
+    cookie: Option<String>,
+}
+
+#[cfg(target_os = "android")]
+pub fn open_login(app: AppHandle, state: Arc<AppState>, add_account: bool) {
+    tauri::async_runtime::spawn(async move {
+        let url = if add_account { ADD_ACCOUNT_URL } else { LOGIN_URL };
+        let reply = crate::android::call::<CookieReply>(
+            &app,
+            "openLogin",
+            serde_json::json!({ "url": url, "addAccount": add_account }),
+        )
+        .await;
+        let cookie = match reply {
+            Ok(r) => r.cookie.unwrap_or_default(),
+            Err(e) => {
+                // Closing the sign-in screen is not an error worth a toast.
+                if !e.contains("cancel") {
+                    let _ = app.emit("login-error", format!("Couldn't open the sign-in screen: {e}"));
+                }
+                return;
+            }
+        };
+        if innertube::cookie_sapisid(&cookie).is_none() {
+            let _ = app.emit("login-error", "Sign-in didn't finish. Try again.".to_string());
+            return;
+        }
+        match state.sign_in(cookie, None).await {
+            Ok(SignInOutcome::Complete) => {
+                let _ = app.emit("login-done", ());
+            }
+            Ok(SignInOutcome::SelectionRequired) => {}
+            Err(e) => {
+                let _ = app.emit("login-error", e);
+            }
+        }
+    });
+}
+
+#[cfg(target_os = "android")]
+pub async fn refresh_session(app: AppHandle, state: Arc<AppState>) {
+    if !state.it.is_logged_in() || !claim_refresh() {
+        return;
+    }
+    let current = state.it.cookie().unwrap_or_default();
+    let Some(account) = innertube::cookie_sapisid(&current) else { return };
+    let reply = tokio::time::timeout(
+        REFRESH_TIMEOUT,
+        crate::android::call::<CookieReply>(&app, "refreshSession", serde_json::json!({ "url": REFRESH_URL })),
+    )
+    .await;
+    let cookie = match reply {
+        Ok(Ok(r)) => r.cookie.unwrap_or_default(),
+        _ => {
+            tracing::debug!("session refresh: the Android webview never reached music.youtube.com");
+            return;
+        }
+    };
+    if innertube::cookie_sapisid(&cookie) == Some(account) && !same_jar(&cookie, &current) {
+        match state.sign_in(cookie, Some(account)).await {
+            Ok(_) => tracing::info!("re-minted the login session from the Android webview"),
+            Err(error) => tracing::warn!(%error, "could not re-mint the login session"),
+        }
+    } else {
+        tracing::debug!("session refresh: the Android webview had nothing fresher to offer");
+    }
 }

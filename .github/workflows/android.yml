@@ -1,5 +1,9 @@
-# Builds Jam for Android (android/): a signed APK, smoke-tested on an emulator, published as a
-# GitHub prerelease. Runs when android/ changes, or by hand from the Actions tab.
+# Jam for Android: Octave, Monochrome and your own sources (web), plus YouTube Music as the real
+# Jam app: the same Rust engine and Svelte UI as Jam on Windows (Limusic rebuilt into Jam), run by
+# Tauri on Android, playing through libmpv.
+#
+# Jobs: libmpv (cached; rebuilt only when android/libmpv changes) → APK (Tauri Android) → release,
+# then an emulator test whose screenshots and logs go on the release as smoke-test.zip.
 #
 # Signing: android/keystore/jam-debug.jks unless these secrets are set (see android/keystore/README.md):
 # JAM_KEYSTORE_B64, JAM_KEYSTORE_PASSWORD, JAM_KEY_ALIAS, JAM_KEY_PASSWORD.
@@ -11,6 +15,7 @@ on:
     branches: [main]
     paths:
       - 'android/**'
+      - 'ytm/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 
@@ -22,21 +27,106 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  libmpv:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: cache
+        uses: actions/cache@v4
+        with:
+          path: libmpv-android.tgz
+          key: libmpv-android-${{ hashFiles('android/libmpv/*') }}
+
+      - uses: actions/setup-java@v4
+        if: steps.cache.outputs.cache-hit != 'true'
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Build libmpv (arm64-v8a, x86_64)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq autoconf pkgconf libtool ninja-build python3-pip gperf nasm wget >/dev/null
+          sudo pip3 install --break-system-packages meson >/dev/null
+          bash android/libmpv/build.sh "$RUNNER_TEMP/libmpv" "$GITHUB_WORKSPACE/libmpv-android.tgz"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libmpv-android
+          path: libmpv-android.tgz
+
+  build:
+    needs: libmpv
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
     outputs:
       version: ${{ steps.apk.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: libmpv-android
+          path: .
+
+      - name: Unpack libmpv into the app
+        run: |
+          JNI=ytm/src-tauri/gen/android/app/src/main/jniLibs
+          mkdir -p "$JNI"
+          tar -xzf libmpv-android.tgz -C "$JNI"
+          rm -rf "$JNI/include"
+          ls -la "$JNI"/*
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ytm/ui/pnpm-lock.yaml
 
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: 17
 
-      - uses: gradle/actions/setup-gradle@v4
+      - name: YouTube Music UI (Svelte)
+        run: cd ytm/ui && pnpm install --frozen-lockfile && pnpm build
+
+      - name: Rust for Android
+        run: rustup target add aarch64-linux-android x86_64-linux-android
+
+      - uses: Swatinem/rust-cache@v2
         with:
-          gradle-version: 8.14.3
+          workspaces: ytm -> target
+          key: android
+
+      - name: Tauri CLI
+        run: npm install -g "@tauri-apps/cli@2.11.5"
+
+      - name: Player-cipher registry snapshot
+        run: |
+          for url in https://raw.githubusercontent.com/MetrolistGroup/faraday/master/registry/player_configs.json \
+                     https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json; do
+            if curl -fsSL --max-time 30 "$url" -o /tmp/pc.json && jq -e '(.players | objects | length) > 0' /tmp/pc.json >/dev/null 2>&1; then
+              cp /tmp/pc.json ytm/src-tauri/cipher_configs.json; echo "bundled from $url"; exit 0
+            fi
+          done
+          echo "::warning::no player-cipher registry reachable; the engine fetches it at runtime"
+
+      - name: Last.fm API keys (optional)
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
+        run: |
+          if [ -n "$LASTFM_API_KEY" ] && [ -n "$LASTFM_API_SECRET" ]; then
+            printf 'LIMUSIC_LASTFM_API_KEY=%s\nLIMUSIC_LASTFM_API_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_API_SECRET" > ytm/src-tauri/lastfm.keys
+          fi
 
       - name: Signing key
         env:
@@ -53,83 +143,31 @@ jobs:
               echo "JAM_KEY_ALIAS=$KS_ALIAS"
               echo "JAM_KEY_PASSWORD=$KEY_PASS"
             } >> "$GITHUB_ENV"
-            echo "Signing with the private key from secrets"
-          else
-            echo "Signing with android/keystore/jam-debug.jks"
           fi
 
-      - name: Build APK
-        working-directory: android
-        run: gradle --no-daemon assembleRelease assembleDebug
+      - name: Build the APKs
+        run: |
+          export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
+          cd ytm/src-tauri
+          tauri android build --apk --split-per-abi --target aarch64 --target x86_64 \
+            --config '{"build":{"beforeBuildCommand":""}}'
 
-      - name: Name the APK
+      - name: Name the APKs
         id: apk
         run: |
-          VERSION=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' ytm/src-tauri/gen/android/app/build.gradle.kts)
+          OUT=ytm/src-tauri/gen/android/app/build/outputs/apk
+          find "$OUT" -name "*.apk" | sort
           mkdir -p out
-          cp android/app/build/outputs/apk/release/app-release.apk "out/Jam-Android-${VERSION}.apk"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          cp "$(find "$OUT" -path '*arm64*' -name '*release*.apk' | head -1)" "out/Jam-Android-${VERSION}.apk"
+          cp "$(find "$OUT" -path '*x86_64*' -name '*release*.apk' | head -1)" "out/Jam-Android-${VERSION}-x86_64.apk"
           ls -la out
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
         with:
           name: jam-android-apk
           path: out/*.apk
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: jam-android-debug
-          path: android/app/build/outputs/apk/debug/app-debug.apk
-
-  smoke-test:
-    needs: [build, release]
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: jam-android-apk
-          path: out
-
-      - uses: actions/download-artifact@v4
-        with:
-          name: jam-android-debug
-          path: debug
-
-      - name: Enable KVM
-        run: |
-          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
-          sudo udevadm control --reload-rules
-          sudo udevadm trigger --name-match=kvm
-
-      - name: Run on an emulator
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 34
-          target: google_apis
-          arch: x86_64
-          profile: pixel_6
-          disable-animations: true
-          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
-          script: bash android/ci/smoke.sh "$(ls out/*.apk | head -1)" shots debug/app-debug.apk
-
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: jam-android-smoke
-          path: shots/
-
-      # Also on the release (temporarily), where it's easy to fetch for review.
-      - name: Attach smoke-test results to the release
-        if: always()
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION: ${{ needs.build.outputs.version }}
-        run: |
-          cd shots && zip -qr ../smoke-test.zip . && cd ..
-          gh release upload "android-v${VERSION}-build.${GITHUB_RUN_NUMBER}" smoke-test.zip --clobber -R "$GITHUB_REPOSITORY"
 
   release:
     needs: build
@@ -148,4 +186,42 @@ jobs:
           TAG="android-v${VERSION}-build.${GITHUB_RUN_NUMBER}"
           gh release create "$TAG" out/*.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "Jam for Android ${VERSION} (build ${GITHUB_RUN_NUMBER})" \
-            --notes "Jam for Android. Download the .apk on your phone and open it to install (allow installs from your browser or files app when asked). Updates install over the previous version and keep your logins."
+            --notes "Jam for Android. On your phone, download Jam-Android-${VERSION}.apk (the -x86_64 one is for emulators) and open it to install. Updates install over the previous version and keep your logins."
+
+  smoke-test:
+    needs: [build, release]
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: jam-android-apk
+          path: out
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-snapshot
+          script: bash android/ci/smoke.sh "$(ls out/*-x86_64.apk | head -1)" shots
+
+      - name: Attach smoke-test results to the release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cd shots && zip -qr ../smoke-test.zip . && cd ..
+          gh release upload "android-v${VERSION}-build.${GITHUB_RUN_NUMBER}" smoke-test.zip --clobber -R "$GITHUB_REPOSITORY"

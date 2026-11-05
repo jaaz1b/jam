@@ -14,6 +14,7 @@ on:
     branches: [main]
     paths-ignore:
       - 'android/**'
+      - 'ytm/src-tauri/gen/android/**'
       - '.github/workflows/android.yml'
   workflow_dispatch:
 

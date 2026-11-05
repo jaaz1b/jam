@@ -427,6 +427,11 @@ pub async fn set_setting(
     // startup repoints an existing entry at the running binary (lib.rs). Before the write, so a
     // failure leaves the setting as it was. A dev build would register itself, and at login its
     // window needs a vite server that isn't running.
+    #[cfg(target_os = "android")]
+    if key == "autostart" {
+        return Err("Starting at login isn't available on Android".into());
+    }
+    #[cfg(not(target_os = "android"))]
     if key == "autostart" {
         if tauri::is_dev() {
             return Err(
@@ -505,7 +510,7 @@ pub async fn set_setting(
     }
     // Hand the frame back to the compositor (or take it again). macOS is not on this path: its
     // titlebar style is fixed at window creation, so the setting is hidden there.
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(not(any(target_os = "macos", target_os = "android")))]
     if key == "system_titlebar" {
         use tauri::Manager;
         if let Some(w) = app.get_webview_window("main") {
@@ -800,14 +805,24 @@ pub async fn show_main(state: St<'_>, window: tauri::WebviewWindow) -> Result<bo
         crate::tray::set_main_visible(window.app_handle(), true);
         return Ok(true);
     }
-    if crate::should_start_minimized(&state.db) {
-        return Ok(false);
+    // Jam for Android: the webview is the activity's screen, already showing.
+    #[cfg(target_os = "android")]
+    {
+        let _ = &state;
+        crate::tray::set_main_visible(window.app_handle(), true);
+        return Ok(true);
     }
-    window.show().map_err(|e| e.to_string())?;
-    window.unminimize().map_err(|e| e.to_string())?;
-    window.set_focus().map_err(|e| e.to_string())?;
-    crate::tray::set_main_visible(window.app_handle(), true);
-    Ok(true)
+    #[cfg(not(target_os = "android"))]
+    {
+        if crate::should_start_minimized(&state.db) {
+            return Ok(false);
+        }
+        window.show().map_err(|e| e.to_string())?;
+        window.unminimize().map_err(|e| e.to_string())?;
+        window.set_focus().map_err(|e| e.to_string())?;
+        crate::tray::set_main_visible(window.app_handle(), true);
+        Ok(true)
+    }
 }
 
 // --- browse / library (context/08) ---------------------------------------------------------
@@ -2564,6 +2579,12 @@ pub async fn release_notes() -> Result<Vec<ReleaseNote>, String> {
 /// Reads the same `Env::appimage` the updater plugin decides on, so the two cannot disagree.
 #[tauri::command]
 pub fn can_self_update(app: tauri::AppHandle) -> bool {
+    // Jam updates the engine with the app; nothing to self-update on Android.
+    #[cfg(target_os = "android")]
+    {
+        let _ = app;
+        false
+    }
     #[cfg(target_os = "linux")]
     {
         use tauri::Manager;
@@ -2571,7 +2592,7 @@ pub fn can_self_update(app: tauri::AppHandle) -> bool {
     }
     // Windows runs the NSIS installer and macOS swaps the .app bundle; both work however the app
     // was installed.
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
     {
         let _ = app;
         true
@@ -2604,6 +2625,14 @@ pub struct BetaUpdate {
 ///
 /// Any different version counts, same as `allowDowngrades` on stable: the pointer only moves forward
 /// by itself, so a lower version there is a beta rollback somebody made on purpose.
+#[cfg(target_os = "android")]
+#[tauri::command]
+pub async fn check_beta_update(webview: tauri::Webview) -> Result<Option<BetaUpdate>, String> {
+    let _ = webview;
+    Ok(None)
+}
+
+#[cfg(not(target_os = "android"))]
 #[tauri::command]
 pub async fn check_beta_update(webview: tauri::Webview) -> Result<Option<BetaUpdate>, String> {
     use tauri::Manager;
@@ -2780,7 +2809,21 @@ pub fn theater_fullscreen(window: tauri::WebviewWindow, on: bool) -> Result<(), 
         return Ok(());
     }
 
-    #[cfg(not(target_os = "windows"))]
+    // Jam for Android: the activity hides the system bars itself (JamPlugin `setFullscreen`).
+    #[cfg(target_os = "android")]
+    {
+        let app = window.app_handle().clone();
+        tauri::async_runtime::spawn(async move {
+            let _ = crate::android::call::<serde_json::Value>(
+                &app,
+                "setFullscreen",
+                serde_json::json!({ "on": on }),
+            )
+            .await;
+        });
+        Ok(())
+    }
+    #[cfg(not(any(target_os = "windows", target_os = "android")))]
     {
         window.set_fullscreen(on).map_err(|e| e.to_string())
     }

@@ -2628,6 +2628,9 @@ impl AppState {
                 }
             });
             m.set_metadata(&item.title, &item.artists, item.album.as_deref(), cover.as_deref());
+            // Jam for Android: the song's link, for Discord's "Listen on YouTube Music" button.
+            #[cfg(target_os = "android")]
+            m.set_video_id(&item.video_id);
         }
         if let Some(d) = &self.discord {
             d.set_track(item);

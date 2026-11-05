@@ -915,6 +915,12 @@ pub(crate) fn open_browser(url: &str) -> Result<(), String> {
     };
     #[cfg(target_os = "macos")]
     let cmd = std::process::Command::new("open").arg(url).spawn().map(|_| ());
+    // Jam for Android: a Custom Tab, through the Android app.
+    #[cfg(target_os = "android")]
+    let cmd: Result<(), std::io::Error> = match crate::android::app() {
+        Some(app) => crate::android::open_browser(app, url).map_err(std::io::Error::other),
+        None => Err(std::io::Error::other("the Android bridge is not ready")),
+    };
     // ShellExecute, not `cmd /C start`: cmd.exe re-parses its command line, so a `"` in the URL
     // ended the quoting and the rest ran as a command, and `%VAR%` expanded. ShellExecute hands the
     // URL to the browser as one string, `&` included (the Last.fm token after it used to get

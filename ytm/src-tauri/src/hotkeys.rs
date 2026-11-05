@@ -10,7 +10,12 @@ use std::sync::{Arc, Mutex};
 
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager};
+#[cfg(not(target_os = "android"))]
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+/// Jam for Android: no global shortcuts (the OS has none to give). Bindings are kept as text so the
+/// settings round-trip, and nothing is registered.
+#[cfg(target_os = "android")]
+pub type Shortcut = String;
 
 use crate::db::Db;
 use crate::state::AppState;
@@ -73,6 +78,7 @@ pub struct HotkeyRegisterResult {
 /// Parse a stored binding ("Ctrl+Alt+Space") with the plugin's own parser. A bare key is refused:
 /// a global grab on Space or a letter would take that key from every app on the desktop. F-keys
 /// are the exception, nothing types with them.
+#[cfg(not(target_os = "android"))]
 pub fn parse_shortcut(input: &str) -> Result<Shortcut, String> {
     let shortcut: Shortcut = input.trim().parse().map_err(|e| format!("{e}"))?;
     let modified = shortcut.mods.intersects(Modifiers::CONTROL | Modifiers::ALT | Modifiers::SUPER);
@@ -97,7 +103,15 @@ impl HotkeysManager {
         Self { config: Mutex::new(config), registered: Mutex::new(HashMap::new()) }
     }
 
+    /// Jam for Android: remember the config, register nothing.
+    #[cfg(target_os = "android")]
+    pub fn apply_config(&self, _app: &AppHandle, new_config: HotkeysConfig) -> HotkeyRegisterResult {
+        *self.config.lock().unwrap() = new_config.clone();
+        HotkeyRegisterResult { success: true, config: new_config, errors: HashMap::new() }
+    }
+
     /// Register all shortcuts from `new_config`, unregistering previous ones.
+    #[cfg(not(target_os = "android"))]
     pub fn apply_config(&self, app: &AppHandle, new_config: HotkeysConfig) -> HotkeyRegisterResult {
         let mut errors = HashMap::new();
         let mut new_registered = HashMap::new();
@@ -157,6 +171,7 @@ impl HotkeysManager {
     }
 
     /// Dispatch triggered shortcut to its bound action.
+    #[cfg(not(target_os = "android"))]
     pub fn handle_event(&self, app: &AppHandle, shortcut: &Shortcut, state: ShortcutState) {
         if state != ShortcutState::Pressed {
             return;

@@ -16,6 +16,35 @@ use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
 mod video;
 pub use video::{GlDisplay, Thumbnail, VideoRenderer};
 
+/// Jam for Android: hand FFmpeg (and through it mpv's AudioTrack output) the JavaVM and the app
+/// context, as mpv-android's `prepare_environment` does. Once per process.
+#[cfg(target_os = "android")]
+mod android {
+    use std::ffi::c_void;
+    use std::sync::Once;
+
+    #[link(name = "avcodec")]
+    extern "C" {
+        fn av_jni_set_java_vm(vm: *mut c_void, log_ctx: *mut c_void) -> i32;
+        fn av_jni_set_android_app_ctx(app_ctx: *mut c_void, log_ctx: *mut c_void) -> i32;
+    }
+
+    pub fn init_jni() {
+        static ONCE: Once = Once::new();
+        ONCE.call_once(|| {
+            let ctx = ndk_context::android_context();
+            // SAFETY: both pointers come from ndk-context, which tao fills with the process's
+            // JavaVM and a global reference to the activity; FFmpeg only stores them.
+            unsafe {
+                av_jni_set_java_vm(ctx.vm(), std::ptr::null_mut());
+                if !ctx.context().is_null() {
+                    av_jni_set_android_app_ctx(ctx.context(), std::ptr::null_mut());
+                }
+            }
+        });
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     #[error("mpv: {0}")]
@@ -258,9 +287,15 @@ impl Decks {
 /// Build one mpv instance, configured. Both decks go through here, so a crossfade deck is not a
 /// lesser player: same cache, same reconnect options, same log level.
 fn new_mpv(cache_dir: &str) -> Result<Mpv, Error> {
+    #[cfg(target_os = "android")]
+    android::init_jni();
     // Mirror the Phase-0 spike: create, then set_property (setting some options during the
     // pre-init phase returns PROPERTY_NOT_FOUND on this mpv build).
     let mpv = Mpv::new()?;
+    // Jam for Android: Android's own audio outputs (AudioTrack, then OpenSL ES), the order
+    // mpv-android uses. Left to probe, mpv tries outputs that don't exist on Android.
+    #[cfg(target_os = "android")]
+    mpv.set_property("ao", "audiotrack,opensles")?;
     // No picture until the app asks for one (`set_video_visible`). When it does, it goes through
     // the render API to the app's own GL surface: pinned, because left to probe mpv opens a window
     // of its own. `video-timing-offset=0` because otherwise each render call blocks until its
