@@ -40,7 +40,14 @@
     switch (m.t) {
       case 'invoke':
         try {
-          const v = await T.invoke(m.cmd, m.args || {});
+          // A raw request body (bytes) arrives as base64.
+          let args = m.args || {};
+          if (args && typeof args.__jamB64 === 'string') {
+            const bin = atob(args.__jamB64); const u8 = new Uint8Array(bin.length);
+            for (let i = 0; i < bin.length; i++) u8[i] = bin.charCodeAt(i);
+            args = u8;
+          }
+          const v = await T.invoke(m.cmd, args, m.options || undefined);
           send({ t: 'result', id: m.id, ok: true, value: encode(v) });
         } catch (e) {
           send({ t: 'result', id: m.id, ok: false, error: errText(e) });

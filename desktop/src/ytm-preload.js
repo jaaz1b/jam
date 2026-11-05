@@ -6,7 +6,6 @@
 // to the engine through Jam's relay (engine.js); window, dialog, clipboard, updater and process calls
 // are answered by Jam itself (main.js, `ytm:local`). The UI's code runs unmodified.
 //
-// Exposed with contextBridge so it exists before the page's first script runs.
 const { contextBridge, ipcRenderer } = require('electron');
 
 // ---- callbacks (Tauri's transformCallback / runCallback)
@@ -57,7 +56,7 @@ function decode(v) {
 
 const LOCAL = /^plugin:(window|webview|dialog|clipboard-manager|updater|process)\|/;
 
-async function invoke(cmd, args = {}) {
+async function invoke(cmd, args = {}, options) {
   cmd = String(cmd);
   if (cmd === 'plugin:event|listen') {
     const id = nextEvent++;
@@ -68,24 +67,56 @@ async function invoke(cmd, args = {}) {
     return id;
   }
   if (cmd === 'plugin:event|unlisten') { unregisterListener(args.event, args.eventId); return null; }
-  const r = await ipcRenderer.invoke(LOCAL.test(cmd) ? 'ytm:local' : 'ytm:invoke', cmd, args || {});
+  const r = await ipcRenderer.invoke(LOCAL.test(cmd) ? 'ytm:local' : 'ytm:invoke', cmd, args, options || null);
   if (!r || !r.ok) throw (r ? r.error : 'Jam: no response');
   return decode(r.value);
 }
 
 const sep = process.platform === 'win32' ? '\\' : '/';
-contextBridge.exposeInMainWorld('__TAURI_INTERNALS__', {
-  __jam: true,
+contextBridge.exposeInMainWorld('__jamTauriBridge', {
   invoke,
   transformCallback: registerCallback,
   unregisterCallback,
   runCallback,
-  convertFileSrc: (filePath) => 'jamytm://asset/' + encodeURIComponent(String(filePath)),
-  metadata: {
-    currentWindow: { label: 'main' },
-    currentWebview: { windowLabel: 'main', label: 'main' },
-  },
-  plugins: { path: { sep, delimiter: process.platform === 'win32' ? ';' : ':' } },
+  unregisterListener,
 });
-contextBridge.exposeInMainWorld('__TAURI_EVENT_PLUGIN_INTERNALS__', { unregisterListener });
-contextBridge.exposeInMainWorld('isTauri', true);
+
+// The page-facing objects are built in the page's own world, synchronously, before any of its
+// scripts run. They must live there because Tauri sends command arguments as JSON, and the UI
+// relies on that: Svelte's reactive state is made of Proxy objects, which JSON handles but
+// cross-world copying refuses ("An object could not be cloned"). So arguments are turned into
+// plain JSON data here first, exactly as Tauri itself would. Raw bytes (a dropped import file)
+// pass through as bytes, with their request headers.
+contextBridge.executeInMainWorld({
+  func: (sep, delimiter) => {
+    const B = window.__jamTauriBridge;
+    const plain = (a) => {
+      if (a === undefined || a === null) return {};
+      if (a instanceof ArrayBuffer) return new Uint8Array(a);
+      if (ArrayBuffer.isView(a)) return new Uint8Array(a.buffer, a.byteOffset, a.byteLength);
+      return JSON.parse(JSON.stringify(a));
+    };
+    const plainOptions = (o) => {
+      if (!o || !o.headers) return undefined;
+      const h = o.headers;
+      const obj = typeof Headers !== 'undefined' && h instanceof Headers ? Object.fromEntries(h.entries()) : h;
+      return { headers: JSON.parse(JSON.stringify(obj)) };
+    };
+    window.__TAURI_INTERNALS__ = {
+      __jam: true,
+      invoke: (cmd, args, options) => B.invoke(cmd, plain(args), plainOptions(options)),
+      transformCallback: (cb, once) => B.transformCallback(cb, once),
+      unregisterCallback: (id) => B.unregisterCallback(id),
+      runCallback: (id, data) => B.runCallback(id, data),
+      convertFileSrc: (filePath) => 'jamytm://asset/' + encodeURIComponent(String(filePath)),
+      metadata: {
+        currentWindow: { label: 'main' },
+        currentWebview: { windowLabel: 'main', label: 'main' },
+      },
+      plugins: { path: { sep, delimiter } },
+    };
+    window.__TAURI_EVENT_PLUGIN_INTERNALS__ = { unregisterListener: (event, id) => B.unregisterListener(event, id) };
+    window.isTauri = true;
+  },
+  args: [sep, process.platform === 'win32' ? ';' : ':'],
+});

@@ -117,12 +117,12 @@ class Engine extends EventEmitter {
   }
 
   // → { ok, value } | { ok: false, error }. Never throws.
-  async invoke(cmd, args) {
+  async invoke(cmd, args, options) {
     try { await this.start(); } catch (e) { return { ok: false, error: e.message }; }
     return new Promise((resolve) => {
       const id = this.nextId++;
       this.pending.set(id, resolve);
-      this._send({ t: 'invoke', id, cmd, args: args || {} });
+      this._send({ t: 'invoke', id, cmd, args: args || {}, options: options || undefined });
     });
   }
 

@@ -518,9 +518,11 @@ function createEngineView(src) {
 
 const ytmSender = (e) => { const v = views.get('ytm'); return !!v && !v.view.webContents.isDestroyed() && e.sender === v.view.webContents; };
 
-ipcMain.handle('ytm:invoke', async (e, cmd, args) => {
+ipcMain.handle('ytm:invoke', async (e, cmd, args, options) => {
   if (!ytmSender(e)) return { ok: false, error: 'forbidden' };
-  return getEngine().invoke(cmd, args);
+  // Raw request bodies (Uint8Array) travel to the engine as base64; the relay restores them.
+  if (args instanceof Uint8Array) args = { __jamB64: Buffer.from(args).toString('base64') };
+  return getEngine().invoke(cmd, args, options && options.headers ? { headers: options.headers } : undefined);
 });
 ipcMain.on('ytm:subscribe', (e, event) => { if (ytmSender(e)) getEngine().subscribe(event); });
 
