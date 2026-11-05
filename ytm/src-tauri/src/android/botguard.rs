@@ -20,7 +20,9 @@ use serde_json::Value;
 
 use crate::webview::Bridge;
 
-const BUNDLE: &str = include_str!("bg_bundle.js");
+/// The bundle ships as an app asset (`assets/bg_bundle.js`); the harness page fetches it from
+/// `https://localhost/jam-asset/` (served by `JamPlugin`), off the app's main thread.
+const BUNDLE_URL: &str = "/jam-asset/bg_bundle.js";
 const GOOG_API_KEY: &str = "AIzaSyDyT5W0Jh49F30Pqqtyfdf7pDLFKLJoAnw";
 const REQUEST_KEY: &str = "O43z0dpjhgX20SCx4KAo";
 const CONTENT_TYPE: &str = "application/json+protobuf";
@@ -67,37 +69,39 @@ fn transient(e: impl std::fmt::Display) -> Error {
 /// The worker: page-side RPC (`__bgCall`), the worker's own globals arranged like deno's (no
 /// `window`/`document`/`location`, an empty `navigator`), then the bundle.
 fn setup_js() -> String {
-    let worker_src = format!(
-        "(function(){{\
-           for (const k of ['location','origin','window','document','top','parent']) {{\
-             try {{ Object.defineProperty(globalThis,k,{{value:undefined,writable:true,configurable:true,enumerable:true}}); }} catch(e) {{}}\
-           }}\
-           class Navigator {{}}\
-           try {{ Object.defineProperty(globalThis,'navigator',{{value:new Navigator(),writable:true,configurable:true}}); }} catch(e) {{}}\
-         }})();\n{BUNDLE}\n\
-         onmessage = async (e) => {{\
-           const m = e.data;\
-           try {{ const v = await globalThis[m.fn](...m.args); postMessage({{id:m.id, ok:1, v:v}}); }}\
-           catch (x) {{ postMessage({{id:m.id, ok:0, e:String((x && (x.stack || x.message)) || x)}}); }}\
-         }};\
-         postMessage({{id:0, ok:1, v:'ready'}});"
-    );
-    let src = serde_json::to_string(&worker_src).unwrap_or_default();
+    let shim = "(function(){\
+         for (const k of ['location','origin','window','document','top','parent']) {\
+           try { Object.defineProperty(globalThis,k,{value:undefined,writable:true,configurable:true,enumerable:true}); } catch(e) {}\
+         }\
+         globalThis.global = globalThis;\
+         class Navigator {}\
+         try { Object.defineProperty(globalThis,'navigator',{value:new Navigator(),writable:true,configurable:true}); } catch(e) {}\
+       })();\n";
+    let rpc = "\nonmessage = async (e) => {\
+         const m = e.data;\
+         try { const v = await globalThis[m.fn](...m.args); postMessage({id:m.id, ok:1, v:v}); }\
+         catch (x) { postMessage({id:m.id, ok:0, e:String((x && (x.stack || x.message)) || x)}); }\
+       };\
+       postMessage({id:0, ok:1, v:'ready'});";
+    let shim = serde_json::to_string(shim).unwrap_or_default();
+    let rpc = serde_json::to_string(rpc).unwrap_or_default();
+    let url = serde_json::to_string(BUNDLE_URL).unwrap_or_default();
     format!(
         "(function(){{\
            if (window.__bgw) return;\
            const pending = {{}}; let n = 0;\
-           window.__bgReady = new Promise((ready, failed) => {{\
-             const w = new Worker(URL.createObjectURL(new Blob([{src}], {{type:'text/javascript'}})));\
-             w.onerror = (e) => {{ const msg = String((e && e.message) || e); failed(new Error(msg)); window.__jserr = 'worker: ' + msg; }};\
-             w.onmessage = (e) => {{\
-               const m = e.data;\
-               if (m.id === 0) {{ ready(true); return; }}\
-               const p = pending[m.id]; if (!p) return; delete pending[m.id];\
-               if (m.ok) p.res(m.v); else p.rej(new Error(m.e));\
-             }};\
-             window.__bgw = w;\
-           }});\
+           window.__bgReady = fetch({url}).then((r) => {{ if (!r.ok) throw new Error('bundle ' + r.status); return r.text(); }})\
+             .then((bundle) => new Promise((ready, failed) => {{\
+               const w = new Worker(URL.createObjectURL(new Blob([{shim}, bundle, {rpc}], {{type:'text/javascript'}})));\
+               w.onerror = (e) => {{ const msg = String((e && e.message) || e); failed(new Error(msg)); window.__jserr = 'worker: ' + msg; }};\
+               w.onmessage = (e) => {{\
+                 const m = e.data;\
+                 if (m.id === 0) {{ ready(true); return; }}\
+                 const p = pending[m.id]; if (!p) return; delete pending[m.id];\
+                 if (m.ok) p.res(m.v); else p.rej(new Error(m.e));\
+               }};\
+               window.__bgw = w;\
+             }}));\
            window.__bgCall = (fn, args) => window.__bgReady.then(() => new Promise((res, rej) => {{\
              const id = ++n; pending[id] = {{res, rej}}; window.__bgw.postMessage({{id, fn, args}});\
            }}));\

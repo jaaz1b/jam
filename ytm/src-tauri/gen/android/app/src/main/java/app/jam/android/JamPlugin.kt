@@ -9,6 +9,8 @@ import android.os.Looper
 import android.util.Log
 import android.webkit.CookieManager
 import android.webkit.WebView
+import android.webkit.WebResourceRequest
+import android.webkit.WebResourceResponse
 import android.webkit.WebViewClient
 import androidx.browser.customtabs.CustomTabsIntent
 import androidx.core.view.WindowInsetsCompat
@@ -70,6 +72,9 @@ class JamPlugin(private val activity: Activity) : Plugin(activity) {
 
         val engineReady: Boolean get() = controls != null
 
+        /** App assets a harness page may load from `https://localhost/jam-asset/`. */
+        private val HARNESS_ASSETS = setOf("bg_bundle.js")
+
         /** Chrome on Android, minus WebView's "; wv" marker: Google refuses sign-in in embedded browsers. */
         fun mobileUa(webView: WebView): String {
             val chrome = Regex("Chrome/(\\d+)").find(webView.settings.userAgentString)?.groupValues?.get(1) ?: "130"
@@ -98,6 +103,20 @@ class JamPlugin(private val activity: Activity) : Plugin(activity) {
             wv.webViewClient = object : WebViewClient() {
                 override fun onPageFinished(view: WebView, url: String?) {
                     if (!answered) { answered = true; invoke.resolve() }
+                }
+
+                // Large scripts the engine's harness pages need (the BotGuard bundle), streamed from
+                // the APK's assets instead of pushed through evaluateJavascript on the main thread.
+                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                    val u = request.url
+                    if (u.host != "localhost" || u.path?.startsWith("/jam-asset/") != true) return null
+                    val name = u.lastPathSegment ?: return null
+                    if (name !in HARNESS_ASSETS) return null
+                    return try {
+                        WebResourceResponse("text/javascript", "utf-8", activity.assets.open(name))
+                    } catch (e: Exception) {
+                        WebResourceResponse("text/plain", "utf-8", 404, "Not Found", emptyMap(), java.io.ByteArrayInputStream(ByteArray(0)))
+                    }
                 }
             }
             harnesses[args.label] = wv

@@ -32,13 +32,25 @@ pub fn init() -> TauriPlugin<Wry> {
 }
 
 /// Call a `JamPlugin` command and wait for its answer.
-pub async fn call<T: DeserializeOwned>(
+///
+/// Safe to cancel (a `timeout` around it, a dropped future): the call itself runs in its own task.
+/// Tauri's async plugin call unwraps the send of Kotlin's reply, so a reply arriving after its
+/// caller gave up panics on the main thread, where nothing can unwind, and the app dies. Kept
+/// alive in a task, the receiver is still there when the late reply comes.
+pub async fn call<T: DeserializeOwned + Send + 'static>(
     app: &AppHandle,
     command: &str,
     args: impl Serialize,
 ) -> Result<T, String> {
     let jam = app.try_state::<Jam>().ok_or("the Android bridge is not registered")?;
-    jam.0.run_mobile_plugin_async::<T>(command, args).await.map_err(|e| e.to_string())
+    let handle = jam.0.clone();
+    let command = command.to_owned();
+    let args = serde_json::to_value(args).map_err(|e| e.to_string())?;
+    tauri::async_runtime::spawn(async move {
+        handle.run_mobile_plugin_async::<T>(command, args).await.map_err(|e| e.to_string())
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 /// Same, blocking the calling thread. For the owner threads that mirror desktop's design.
