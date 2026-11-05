@@ -1,0 +1,49 @@
+# Jam: real YouTube Music responses + artwork, for designing the phone layout offline
+# (ytm/ui/mobile-lab). Run by hand; the bundle lands on the `ui-fixtures` prerelease.
+name: UI fixtures
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: ytm -> target
+          key: fixtures
+      - name: Dump responses
+        run: cd ytm && cargo run -q -p innertube --example fixtures -- "$RUNNER_TEMP/fx"
+      - name: Download artwork
+        run: |
+          cd "$RUNNER_TEMP/fx" && mkdir -p img
+          python3 - <<'PY'
+          import hashlib, re, urllib.request, concurrent.futures as cf
+          urls = [u.strip() for u in open('thumbs.txt') if u.strip()][:600]
+          def key(u):
+              base = re.sub(r'=[wsh]\d+[^/?#]*$', '', u)
+              return hashlib.sha1(base.encode()).hexdigest()
+          def get(u):
+              big = re.sub(r'=w\d+-h\d+', '=w544-h544', u)
+              big = re.sub(r'=s\d+', '=s544', big)
+              try:
+                  data = urllib.request.urlopen(urllib.request.Request(big, headers={'User-Agent': 'Mozilla/5.0'}), timeout=20).read()
+                  open('img/' + key(u), 'wb').write(data)
+              except Exception as e:
+                  print('skip', u[:80], e)
+          with cf.ThreadPoolExecutor(16) as ex: list(ex.map(get, urls))
+          PY
+          ls img | wc -l
+          tar -czf "$GITHUB_WORKSPACE/fixtures.tgz" .
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view ui-fixtures -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create ui-fixtures -R "$GITHUB_REPOSITORY" --prerelease --title "UI fixtures (for development)" --notes "Sample data for designing Jam's phone layout. Not an app release."
+          gh release upload ui-fixtures fixtures.tgz --clobber -R "$GITHUB_REPOSITORY"
