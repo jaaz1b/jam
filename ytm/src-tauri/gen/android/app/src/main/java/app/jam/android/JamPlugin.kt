@@ -73,7 +73,7 @@ class JamPlugin(private val activity: Activity) : Plugin(activity) {
         val engineReady: Boolean get() = controls != null
 
         /** App assets a harness page may load from `https://localhost/jam-asset/`. */
-        private val HARNESS_ASSETS = setOf("bg_bundle.js")
+        private val HARNESS_ASSETS = setOf("bg_worker_head.js", "bg_bundle.js", "bg_worker_tail.js")
 
         /** Chrome on Android, minus WebView's "; wv" marker: Google refuses sign-in in embedded browsers. */
         fun mobileUa(webView: WebView): String {

@@ -1,0 +1,30 @@
+# Dev only: does the Android BotGuard worker land in the accepted integrity-token class?
+# Runs android/ci/botguard-probe/probe.mjs (the app's worker assets, in headless Chrome).
+name: BotGuard probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      bootstraps:
+        description: How many bootstraps
+        default: '8'
+  push:
+    branches: [main]
+    paths:
+      - 'android/ci/botguard-probe/**'
+      - 'ytm/src-tauri/gen/android/app/src/main/assets/bg_*'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Probe
+        run: |
+          cd android/ci/botguard-probe
+          npm install --no-save --silent puppeteer-core@24
+          node probe.mjs "$GITHUB_WORKSPACE/ytm/src-tauri/gen/android/app/src/main/assets" "${{ inputs.bootstraps || '8' }}"
