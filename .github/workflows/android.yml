@@ -77,7 +77,7 @@ jobs:
           path: out/*.apk
 
   smoke-test:
-    needs: build
+    needs: [build, release]
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -110,6 +110,16 @@ jobs:
         with:
           name: jam-android-smoke
           path: shots/
+
+      # Also on the release (temporarily), where it's easy to fetch for review.
+      - name: Attach smoke-test results to the release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          cd shots && zip -qr ../smoke-test.zip . && cd ..
+          gh release upload "android-v${VERSION}-build.${GITHUB_RUN_NUMBER}" smoke-test.zip --clobber -R "$GITHUB_REPOSITORY"
 
   release:
     needs: build
