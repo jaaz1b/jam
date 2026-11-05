@@ -1536,3 +1536,15 @@ html.jam-android [data-sheet] > * {
 	border-bottom-width: 0;
 	padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
 }
+
+/* Jam for Android: two tiles a row for moods and genres, like YouTube Music's own phone app. */
+html.jam-android .mood-grid.moods,
+html.jam-android .mood-grid.genres {
+	grid-template-columns: repeat(2, minmax(0, 1fr));
+	gap: 0.625rem;
+}
+html.jam-android .mood-grid.moods .mood,
+html.jam-android .mood-grid.genres .mood {
+	height: 5.25rem;
+	padding: 0.75rem 0.875rem;
+}

@@ -62,6 +62,15 @@ if [ -n "$TAP" ]; then
   adb shell input keyevent BACK; sleep 2
 fi
 
+# More of YouTube Music, opened from links: an album, an artist and a playlist.
+n=9
+for link in "browse/MPREb_K8qWMWVqXGi album" "channel/UClYV6hHlupm_S_ObS1W-DYw artist" "playlist?list=RDCLAK5uy_n20FRYQXNt1p1wS55Nj2r14IouO5weaYU playlist"; do
+  set -- $link
+  adb shell "am start -a android.intent.action.VIEW -d 'https://music.youtube.com/$1' -n $PKG/$ACT" >/dev/null
+  sleep 14; shot "$(printf %02d $n)-ytm-$2"; n=$((n+1))
+  adb shell input swipe 540 1600 540 700 300; sleep 2; shot "$(printf %02d $n)-ytm-$2-scrolled"; n=$((n+1))
+done
+
 # Logs: the engine's own (limusic.log) and logcat.
 timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
 for f in $(adb shell "find /data/data/$PKG /data/user/0/$PKG -name 'limusic.log*' 2>/dev/null" | tr -d '\r' | sort -u); do

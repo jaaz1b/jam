@@ -243,7 +243,7 @@
 							onerror={() => attempt++}
 							onload={(e) => isMissingThumb(e) && attempt++}
 							style={srcs[2] ? `background-image:url(${srcs[2]})` : undefined}
-							class="aspect-square w-full rounded-[20px] bg-cover object-cover shadow-2xl"
+							class="aspect-square w-full rounded-[20px] bg-cover bg-center object-cover shadow-2xl"
 							in:fade={{ duration: 200 }}
 						/>
 					{:else}
