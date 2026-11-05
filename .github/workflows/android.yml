@@ -1,0 +1,131 @@
+# Builds Jam for Android (android/): a signed APK, smoke-tested on an emulator, published as a
+# GitHub prerelease. Runs when android/ changes, or by hand from the Actions tab.
+#
+# Signing: android/keystore/jam-debug.jks unless these secrets are set (see android/keystore/README.md):
+# JAM_KEYSTORE_B64, JAM_KEYSTORE_PASSWORD, JAM_KEY_ALIAS, JAM_KEY_PASSWORD.
+
+name: Android build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/**'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: android-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.apk.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 8.14.3
+
+      - name: Signing key
+        env:
+          KS_B64: ${{ secrets.JAM_KEYSTORE_B64 }}
+          KS_PASS: ${{ secrets.JAM_KEYSTORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.JAM_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.JAM_KEY_PASSWORD }}
+        run: |
+          if [ -n "$KS_B64" ]; then
+            echo "$KS_B64" | base64 -d > "$RUNNER_TEMP/jam.jks"
+            {
+              echo "JAM_KEYSTORE_FILE=$RUNNER_TEMP/jam.jks"
+              echo "JAM_KEYSTORE_PASSWORD=$KS_PASS"
+              echo "JAM_KEY_ALIAS=$KS_ALIAS"
+              echo "JAM_KEY_PASSWORD=$KEY_PASS"
+            } >> "$GITHUB_ENV"
+            echo "Signing with the private key from secrets"
+          else
+            echo "Signing with android/keystore/jam-debug.jks"
+          fi
+
+      - name: Build APK
+        working-directory: android
+        run: gradle --no-daemon assembleRelease
+
+      - name: Name the APK
+        id: apk
+        run: |
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' android/app/build.gradle.kts)
+          mkdir -p out
+          cp android/app/build/outputs/apk/release/app-release.apk "out/Jam-Android-${VERSION}.apk"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jam-android-apk
+          path: out/*.apk
+
+  smoke-test:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: jam-android-apk
+          path: out
+
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+
+      - name: Run on an emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          target: google_apis
+          arch: x86_64
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none -no-snapshot
+          script: bash android/ci/smoke.sh "$(ls out/*.apk | head -1)" shots
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: jam-android-smoke
+          path: shots/
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: jam-android-apk
+          path: out
+
+      - name: Publish prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          TAG="android-v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          gh release create "$TAG" out/*.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Jam for Android ${VERSION} (build ${GITHUB_RUN_NUMBER})" \
+            --notes "Jam for Android. Download the .apk on your phone and open it to install (allow installs from your browser or files app when asked). Updates install over the previous version and keep your logins."

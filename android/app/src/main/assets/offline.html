@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can't reach this source</title>
+<style>
+  html, body { margin:0; height:100%; background:#0f0f13; color:#ececf1; font:15px/1.5 system-ui, Roboto, sans-serif; }
+  body { display:flex; align-items:center; justify-content:center; padding:24px; box-sizing:border-box; }
+  .box { max-width:420px; width:100%; text-align:center; }
+  img { width:96px; height:96px; image-rendering:pixelated; margin-bottom:8px; }
+  h1 { font-size:20px; margin:6px 0; }
+  p { color:#9b9bab; margin:6px 0 18px; }
+  .err { font:12px ui-monospace, monospace; color:#6e6e7e; }
+  button { font:inherit; border-radius:999px; padding:10px 18px; border:1px solid #2b2b35; background:#22222b; color:#ececf1; margin:4px; }
+  button.primary { background:#8b5cf6; border-color:#8b5cf6; color:#fff; font-weight:600; }
+  .list { display:flex; flex-wrap:wrap; justify-content:center; margin-top:10px; }
+  .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:7px; vertical-align:1px; }
+  .muted { color:#6e6e7e; font-size:13px; margin-top:16px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <img src="jam-icon.png" alt="">
+  <h1 id="title">Can't reach this source</h1>
+  <p id="msg">It may be down for maintenance, or you're offline.</p>
+  <button class="primary" id="retry">Try again</button>
+  <div class="muted" id="switchLabel">Or switch to another source:</div>
+  <div class="list" id="list"></div>
+  <p class="err" id="err"></p>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  const src = q.get('src'), name = q.get('name') || 'This source';
+  document.getElementById('title').textContent = name + " isn't loading";
+  document.getElementById('err').textContent = q.get('err') || '';
+  if (!navigator.onLine) document.getElementById('msg').textContent = "You're offline. Jam will try again when you're back online.";
+  const J = window.JamNative;
+  document.getElementById('retry').onclick = () => J && J.retry();
+  window.addEventListener('online', () => J && J.retry());
+  try {
+    const list = JSON.parse(J.sources()).filter((s) => s.id !== src);
+    for (const s of list) {
+      const b = document.createElement('button');
+      const d = document.createElement('span'); d.className = 'dot'; d.style.background = s.color;
+      b.append(d, document.createTextNode(s.name));
+      b.onclick = () => J.switchTo(s.id);
+      document.getElementById('list').appendChild(b);
+    }
+  } catch (e) { document.getElementById('switchLabel').style.display = 'none'; }
+</script>
+</body>
+</html>
