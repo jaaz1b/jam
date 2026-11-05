@@ -36,9 +36,40 @@ else
   echo "Settings button not found"
 fi
 
-# Background: Jam should stay alive (music keeps playing).
-adb shell input keyevent HOME; sleep 5
-adb shell pidof "$PKG" > "$OUT/pid.txt" || echo "not running" > "$OUT/pid.txt"
+# Background playback: add a test source (a page that plays a quiet tone) straight into Jam's settings,
+# start playing, leave the app, turn the screen off, and check the audio keeps going.
+if [ -n "${GITHUB_SHA:-}" ]; then
+  TEST_URL="https://raw.githack.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/android/ci/test-player.html"
+  adb shell am force-stop "$PKG"
+  adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
+  python3 - "$TEST_URL" > "$OUT/jam.xml" <<'PY'
+import json, sys
+from xml.sax.saxutils import escape
+s = {"customSources": [{"id": "c_smoketest", "name": "Test tone", "url": sys.argv[1], "color": "#22c55e", "desktopSite": False, "extraDomains": []}],
+     "defaultSource": "c_smoketest", "openLastSource": False}
+print("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name=\"settings\">" + escape(json.dumps(s), {'"': "&quot;"}) + "</string>\n</map>")
+PY
+  adb push "$OUT/jam.xml" /data/local/tmp/jam.xml >/dev/null
+  adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam.xml $D/shared_prefs/jam.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam.xml; chmod 660 $D/shared_prefs/jam.xml; restorecon -R $D/shared_prefs'
+  adb shell am start -W -n "$PKG/$ACT"
+  sleep 25; shot 9-test-playing
+  adb shell input keyevent HOME; sleep 20
+  adb shell input keyevent KEYCODE_SLEEP; sleep 40
+  adb shell dumpsys audio > "$OUT/audio.txt"
+  adb shell dumpsys media_session > "$OUT/media_session.txt"
+  adb shell dumpsys notification --noredact > "$OUT/notification.txt"
+  adb shell pidof "$PKG" > "$OUT/pid.txt" || echo "not running" > "$OUT/pid.txt"
+  adb shell input keyevent KEYCODE_WAKEUP; sleep 2
+  adb shell wm dismiss-keyguard 2>/dev/null; adb shell input keyevent 82; sleep 2
+  shot 10-notification-shade-off
+  adb shell cmd statusbar expand-notifications; sleep 3; shot 11-notifications
+  adb shell cmd statusbar collapse; sleep 1
+  adb shell am start -W -n "$PKG/$ACT"; sleep 4; shot 12-back-in-app
+  echo "--- background playback ---"
+  echo "Jam pid: $(cat "$OUT/pid.txt")"
+  grep -iE "state:(started|paused)" "$OUT/audio.txt" | head -5
+  grep -iE "app.jam|state=PlaybackState" "$OUT/media_session.txt" | head -6
+fi
 adb shell dumpsys package "$PKG" | grep -E "versionName|versionCode" > "$OUT/version.txt"
 adb shell dumpsys webviewupdate > "$OUT/webview.txt" 2>&1
 adb logcat -d -v time > "$OUT/logcat-full.txt"

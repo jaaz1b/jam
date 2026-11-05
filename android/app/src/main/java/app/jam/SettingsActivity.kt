@@ -46,13 +46,16 @@ class SettingsActivity : AppCompatActivity() {
                 return true
             }
         }
-        ViewCompat.setOnApplyWindowInsetsListener(web) { v, insets ->
+        // Keep the page clear of the status bar / navigation bar / keyboard.
+        val frame = android.widget.FrameLayout(this).apply { setBackgroundColor(0xFF131318.toInt()) }
+        frame.addView(web, android.widget.FrameLayout.LayoutParams(-1, -1))
+        ViewCompat.setOnApplyWindowInsetsListener(frame) { v, insets ->
             val sys = insets.getInsets(WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout())
             val ime = insets.getInsets(WindowInsetsCompat.Type.ime())
             v.setPadding(sys.left, sys.top, sys.right, maxOf(sys.bottom, ime.bottom))
             WindowInsetsCompat.CONSUMED
         }
-        setContentView(web)
+        setContentView(frame)
         val section = intent.getStringExtra("section")
         web.loadUrl("file:///android_asset/settings.html" + (section?.let { "?section=" + Uri.encode(it) } ?: ""))
         onBackPressedDispatcher.addCallback(this) { finish() }

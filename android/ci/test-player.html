@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Jam test player</title></head>
+<body style="background:#111;color:#eee;font:16px sans-serif;padding:20px">
+<h1>Jam test player</h1>
+<p>Used by Jam's automated Android test: plays a quiet tone so background playback can be checked.</p>
+<audio id="a" src="tone.wav" loop autoplay controls></audio>
+<p id="t">0</p>
+<script>
+  const a = document.getElementById('a');
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.metadata = new MediaMetadata({ title: 'Background test tone', artist: 'Jam CI', album: 'Smoke test' });
+  }
+  a.play().catch((e) => { document.getElementById('t').textContent = 'play failed: ' + e; });
+  setInterval(() => { document.getElementById('t').textContent = a.currentTime.toFixed(1) + 's, paused=' + a.paused; }, 1000);
+</script>
+</body>
+</html>
