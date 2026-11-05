@@ -1,0 +1,662 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: https: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Jam Settings</title>
+<style>
+  :root {
+    --bg:#131318; --panel:#1b1b22; --panel2:#22222b; --line:#2b2b35; --text:#ececf1; --muted:#9b9bab; --faint:#6e6e7e;
+    --accent:#8b5cf6; --accent-soft:rgba(139,92,246,.16); --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+  }
+  * { box-sizing:border-box; }
+  html, body { height:100%; }
+  body { margin:0; background:var(--bg); color:var(--text); font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; display:flex; flex-direction:column; overflow:hidden; }
+  header { -webkit-app-region:drag; display:flex; align-items:flex-start; justify-content:space-between; padding:16px 22px 14px; border-bottom:1px solid var(--line); flex:none; }
+  header h1 { margin:0; font-size:18px; font-weight:650; }
+  header p { margin:2px 0 0; color:var(--muted); font-size:13px; }
+  header.mac { padding-left:86px; }
+  header.mac .x { display:none; }
+  header.win .x { display:none; }
+  header.win { padding-right:60px; }
+  .x { -webkit-app-region:no-drag; background:none; border:0; color:var(--muted); font-size:22px; line-height:1; cursor:pointer; padding:2px 6px; border-radius:6px; }
+  .x:hover { color:var(--text); background:var(--panel2); }
+  main { flex:1; display:grid; grid-template-columns:minmax(0,1fr) 440px; min-height:0; }
+  .left { overflow-y:auto; padding:18px 22px 40px; border-right:1px solid var(--line); }
+  .right { padding:18px 22px; display:flex; flex-direction:column; min-height:0; overflow-y:auto; }
+  .left::-webkit-scrollbar, .right::-webkit-scrollbar { width:8px; }
+  .left::-webkit-scrollbar-thumb, .right::-webkit-scrollbar-thumb { background:#3a3a46; border-radius:8px; }
+
+  h2 { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); margin:22px 0 8px 4px; font-weight:650; }
+  h2:first-child { margin-top:0; }
+  .card { background:var(--panel); border:1px solid var(--line); border-radius:12px; }
+  .row { padding:14px 18px; display:grid; grid-template-columns:1fr auto; gap:4px 16px; align-items:center; }
+  .row + .row { border-top:1px solid var(--line); }
+  .row .name { font-weight:600; font-size:15px; }
+  .row .desc { grid-column:1 / -1; color:var(--muted); font-size:13px; }
+  .row.stack { grid-template-columns:1fr; }
+  .row.stack .desc { grid-column:1; }
+  .section.off { opacity:.42; pointer-events:none; }
+  .row.off { opacity:.42; pointer-events:none; }
+
+  .switch { position:relative; width:42px; height:24px; flex:none; }
+  .switch input { opacity:0; width:0; height:0; position:absolute; }
+  .slider { position:absolute; inset:0; background:#3a3a47; border-radius:24px; transition:.15s; cursor:pointer; }
+  .slider:before { content:""; position:absolute; width:18px; height:18px; left:3px; top:3px; background:#fff; border-radius:50%; transition:.15s; }
+  .switch input:checked + .slider { background:var(--accent); }
+  .switch input:checked + .slider:before { transform:translateX(18px); }
+  .switch input:focus-visible + .slider { outline:2px solid #c4b5fd; outline-offset:2px; }
+
+  input[type=text], select { background:var(--panel2); border:1px solid var(--line); color:var(--text); border-radius:999px; padding:9px 16px; font:inherit; font-size:14px; outline:none; min-width:0; }
+  input[type=text] { width:100%; }
+  input[type=text]:focus, select:focus { border-color:var(--accent); }
+  input.mono { font-family:ui-monospace,Consolas,monospace; font-size:13px; }
+  input.invalid { border-color:var(--bad); }
+  select { appearance:none; padding-right:38px; cursor:pointer; min-width:250px;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='16' viewBox='0 0 12 16'%3E%3Cpath d='M2 6l4-4 4 4M2 10l4 4 4-4' fill='none' stroke='%23b8b8c6' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-repeat:no-repeat; background-position:right 14px center; }
+  select option { background:#22222b; }
+  .field { display:flex; flex-direction:column; gap:6px; margin-top:8px; }
+  .field label { font-size:12px; color:var(--muted); margin-left:4px; }
+  .two { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  .chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:7px; }
+  .chip { font:12px ui-monospace,Consolas,monospace; color:#c9b8ff; background:var(--accent-soft); border:1px solid transparent; border-radius:999px; padding:3px 9px; cursor:pointer; }
+  .chip:hover { border-color:var(--accent); }
+  .status { display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--muted); }
+  .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
+  .dot.connected { background:var(--ok); } .dot.connecting { background:var(--warn); } .dot.error, .dot.no-client-id { background:var(--bad); }
+  ol { margin:10px 0 0; padding-left:20px; color:var(--muted); font-size:13px; }
+  ol li { margin:3px 0; }
+  a { color:#b79cff; cursor:pointer; text-decoration:none; } a:hover { text-decoration:underline; }
+  button.btn { font:inherit; border-radius:999px; padding:8px 16px; border:1px solid var(--line); background:var(--panel2); color:var(--text); cursor:pointer; white-space:nowrap; }
+  button.btn:hover { border-color:#4a4a58; }
+  button.btn.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+
+  /* ---------- preview ---------- */
+  .ptitle { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .ptitle h3 { margin:0; font-size:13px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:650; }
+  .badge { font-size:12px; padding:2px 9px; border-radius:999px; background:var(--accent-soft); color:#c9b8ff; }
+  .badge.paused { background:rgba(245,158,11,.14); color:#fbbf24; }
+  .badge.hidden { background:rgba(239,68,68,.14); color:#f87171; }
+  .badge.sample { background:rgba(155,155,171,.14); color:var(--muted); }
+  .plabel { font-size:13px; color:var(--muted); margin:12px 0 6px; }
+  .dcard { background:#232428; border:1px solid #2f3036; border-radius:10px; padding:12px 14px 14px; position:relative; }
+  .dhead { display:flex; justify-content:space-between; font-size:13px; font-weight:650; color:#dbdee1; margin-bottom:10px; }
+  .dhead .more { color:#b5bac1; letter-spacing:1px; }
+  .dbody { display:flex; gap:12px; }
+  .art { width:88px; height:88px; border-radius:8px; flex:none; object-fit:cover; background:#1a1b1e; }
+  .dtext { min-width:0; flex:1; display:flex; flex-direction:column; justify-content:center; }
+  .d1 { font-weight:700; font-size:16px; color:#f2f3f5; }
+  .d2, .d3 { font-size:14px; color:#dbdee1; }
+  .d1, .d2, .d3 { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .bar { display:flex; align-items:center; gap:10px; margin-top:8px; font:12px ui-monospace,Consolas,monospace; color:#dbdee1; }
+  .track { flex:1; height:4px; border-radius:4px; background:#4e5058; overflow:hidden; }
+  .fill { height:100%; background:#f2f3f5; width:0; }
+  .elapsed { margin-top:8px; font-size:13px; color:#b5bac1; }
+  .dbtns { display:flex; flex-direction:column; gap:8px; margin-top:12px; }
+  .dbtn { background:#4e5058; color:#f2f3f5; border-radius:6px; padding:7px; text-align:center; font-size:14px; font-weight:550; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dempty { position:absolute; inset:0; border-radius:10px; background:rgba(19,19,24,.82); display:none; align-items:center; justify-content:center; text-align:center; padding:20px; color:var(--muted); font-size:13px; }
+  .dempty.show { display:flex; }
+  .member { background:#232428; border:1px solid #2f3036; border-radius:10px; padding:10px 12px; display:flex; align-items:center; gap:12px; }
+  .avatar { width:40px; height:40px; border-radius:50%; background:linear-gradient(135deg,#8b5cf6,#ec4899); flex:none; }
+  .mname { font-weight:600; font-size:16px; color:#f2f3f5; }
+  .mstatus { font-size:13px; color:#b5bac1; display:flex; align-items:center; gap:5px; white-space:nowrap; overflow:hidden; }
+  .mstatus span { overflow:hidden; text-overflow:ellipsis; }
+  .note { font-size:12px; color:var(--faint); margin-top:10px; }
+  details { margin-top:14px; }
+  summary { cursor:pointer; color:var(--muted); font-size:13px; }
+  pre { background:#0d0d11; border:1px solid var(--line); border-radius:8px; padding:10px; font-size:11.5px; color:#c8c8d4; overflow:auto; max-height:220px; white-space:pre-wrap; word-break:break-all; }
+  .srclist { padding:6px 0; }
+  .src { display:grid; grid-template-columns:auto 1fr auto; gap:2px 12px; align-items:center; padding:10px 18px; }
+  .src + .src { border-top:1px solid var(--line); }
+  .src .sdot { width:10px; height:10px; border-radius:50%; }
+  .src .sname { font-weight:600; font-size:15px; display:flex; align-items:center; gap:8px; }
+  .src .sname .tag { font-size:11px; font-weight:600; padding:1px 8px; border-radius:999px; background:var(--accent-soft); color:#c9b8ff; }
+  .src .acts { display:flex; gap:6px; }
+  .src .acts button { padding:5px 12px; font-size:13px; }
+  .src .sub { grid-column:2 / -1; font-size:12.5px; color:var(--muted); display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .src .sub.ok { color:#86efac; } .src .sub.warn { color:#fcd34d; } .src .sub.bad { color:#fca5a5; }
+  .srclist + .addrow { border-top:1px solid var(--line); }
+  .addrow { padding:12px 18px; display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+  .addrow + .row { border-top:1px solid var(--line); }
+  .hint { color:var(--muted); font-size:12.5px; }
+  .editor { grid-column:1 / -1; margin-top:10px; background:var(--panel2); border:1px solid var(--line); border-radius:12px; padding:14px; display:grid; gap:10px; }
+  .editor .f { display:flex; flex-direction:column; gap:5px; }
+  .editor label { font-size:12px; color:var(--muted); margin-left:4px; }
+  .editor input[type=text] { background:#17171d; }
+  .editor .err { color:#fca5a5; font-size:13px; min-height:1em; }
+  .editor .bar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .editor .bar .grow { flex:1; }
+  .swatches { display:flex; gap:7px; flex-wrap:wrap; }
+  .sw { width:22px; height:22px; border-radius:50%; border:2px solid transparent; cursor:pointer; padding:0; }
+  .sw.on { border-color:#fff; box-shadow:0 0 0 2px var(--accent); }
+  details.adv summary { font-size:12.5px; color:var(--muted); cursor:pointer; margin:0; }
+  .src .url { grid-column:2 / -1; font:12px ui-monospace,Consolas,monospace; color:var(--faint); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .tag.custom { background:rgba(148,163,184,.15); color:#cbd5e1; }
+  .reset { margin-top:auto; padding-top:18px; }
+  .reset button { background:none; border:0; color:var(--text); font:inherit; font-weight:600; cursor:pointer; display:flex; align-items:center; gap:8px; padding:6px 4px; }
+  .reset button:hover { color:#c9b8ff; }
+</style>
+</head>
+<body>
+<header id="hdr">
+  <div><h1>Settings</h1><p>Sources, your Discord status, and app options.</p></div>
+  <button class="x" id="closeBtn" title="Close (Esc)">✕</button>
+</header>
+
+<main>
+<div class="left" id="left">
+
+  <h2 id="sec-sources">Sources</h2>
+  <div class="card">
+    <div class="srclist" id="srcList"></div>
+    <div class="addrow"><button class="btn" id="addSourceBtn">＋ Add a source</button>
+      <span class="hint">Any music website that plays without DRM (like Monochrome). Works right away, no reinstall.</span></div>
+    <div class="row"><span class="name">Open with</span>
+      <select data-k="defaultSource" id="defaultSource"></select>
+      <span class="desc">The service Jam opens when it starts. Switch any time from the title bar or with Ctrl+1–9.</span></div>
+    <div class="row"><span class="name">Start where I left off</span><label class="switch"><input type="checkbox" data-k="openLastSource"><span class="slider"></span></label>
+      <span class="desc">Open the last service you used instead.</span></div>
+    <div class="row"><span class="name">Keep switched-away sources ready</span>
+      <select data-k="keepWarmMinutes">
+        <option value="0">Off — free memory right away</option>
+        <option value="2">For 2 minutes</option>
+        <option value="5">For 5 minutes</option>
+        <option value="15">For 15 minutes</option>
+        <option value="-1">Until I quit</option>
+      </select>
+      <span class="desc">Switching back within this time is instant. Shorter uses less memory. The service you switch away from is paused.</span></div>
+  </div>
+
+  <h2>Discord</h2>
+  <div class="card">
+    <div class="row"><span class="name">Rich Presence</span><label class="switch"><input type="checkbox" data-k="rpcEnabled"><span class="slider"></span></label>
+      <span class="desc">Show the currently playing song on your Discord profile.</span></div>
+    <div class="row gated"><span class="name">Show when paused</span><label class="switch"><input type="checkbox" data-k="showWhenPaused"><span class="slider"></span></label>
+      <span class="desc">Keep the card up while the track is paused. Discord has no paused state, so the progress bar is dropped rather than left running.</span></div>
+    <div class="row gated"><span class="name">Hide details</span><label class="switch"><input type="checkbox" data-k="hideDetails"><span class="slider"></span></label>
+      <span class="desc">Say only that music is playing. No title, artist, album, artwork, progress bar or buttons leave your machine.</span></div>
+  </div>
+
+  <div class="section gated">
+    <h2>Status</h2>
+    <div class="card">
+      <div class="row detail"><span class="name">Status text</span>
+        <select data-k="statusDisplay">
+          <option value="line1">Line 1 · Song title</option>
+          <option value="line2">Line 2 · Artist</option>
+          <option value="app">App name</option>
+        </select>
+        <span class="desc">What Discord shows next to your name in the member list. The profile card always shows the app name.</span></div>
+      <div class="row"><span class="name">App name</span>
+        <input type="text" data-k="appName" placeholder="Jam" style="width:250px">
+        <span class="desc">Replaces “Jam” wherever <code>{app}</code> appears: lines, button labels, hover text. Use <code>{source}</code> for the service you're listening on (e.g. “Spotify”). The “Listening to …” header itself is your Discord application's name — rename it in the Developer Portal.</span></div>
+      <div class="row detail"><span class="name">Paused label</span>
+        <input type="text" data-k="pausedLabel" placeholder="(none)" style="width:250px">
+        <span class="desc">Added in front of line 2 while paused, e.g. “Paused · Neon Coast”. Leave empty to add nothing.</span></div>
+    </div>
+  </div>
+
+  <div class="section gated detail">
+    <h2>Lines</h2>
+    <div class="card">
+      <div class="row stack">
+        <span class="name">Line 1</span>
+        <input type="text" data-k="line1" data-template placeholder="{title}">
+        <div class="chips"></div>
+      </div>
+      <div class="row stack">
+        <span class="name">Line 2</span>
+        <input type="text" data-k="line2" data-template placeholder="{artist}">
+        <div class="chips"></div>
+      </div>
+      <div class="row stack">
+        <span class="name">Line 3</span>
+        <input type="text" data-k="line3" data-template placeholder="{album}">
+        <div class="chips"></div>
+        <span class="desc">Also the text that shows when someone hovers the artwork. Separators left dangling by an empty field (like “Song — ” with no album) are tidied up automatically.</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="section gated detail">
+    <h2>Progress &amp; artwork</h2>
+    <div class="card">
+      <div class="row"><span class="name">Progress</span>
+        <select data-k="progress">
+          <option value="bar">Progress bar</option>
+          <option value="elapsed">Elapsed time only</option>
+          <option value="off">Nothing</option>
+        </select>
+        <span class="desc">How playback time appears on the card.</span></div>
+      <div class="row"><span class="name">Album art</span><label class="switch"><input type="checkbox" data-k="showAlbumArt"><span class="slider"></span></label>
+        <span class="desc">Use the song's cover. When off, or when a song has none, the fallback image is used.</span></div>
+      <div class="row stack"><span class="name">Fallback image</span>
+        <input type="text" class="mono" data-k="fallbackImage" placeholder="jam">
+        <span class="desc">An Art Asset key from your Discord application (default <code>jam</code>), or an <code>https://</code> image URL.</span></div>
+    </div>
+  </div>
+
+  <div class="section gated detail">
+    <h2>Buttons</h2>
+    <div class="card">
+      <div class="row"><span class="name">Button 1</span><label class="switch"><input type="checkbox" data-k="button1Enabled"><span class="slider"></span></label>
+        <div class="desc" style="color:inherit">
+          <div class="two b1">
+            <div class="field"><label>Label</label><input type="text" data-k="button1Label" data-template placeholder="Listen on {app}" maxlength="64"></div>
+            <div class="field"><label>Link</label><input type="text" class="mono url" data-k="button1Url" placeholder="Current page"></div>
+          </div>
+        </div></div>
+      <div class="row"><span class="name">Button 2</span><label class="switch"><input type="checkbox" data-k="button2Enabled"><span class="slider"></span></label>
+        <div class="desc" style="color:inherit">
+          <div class="two b2">
+            <div class="field"><label>Label</label><input type="text" data-k="button2Label" data-template placeholder="My profile" maxlength="64"></div>
+            <div class="field"><label>Link</label><input type="text" class="mono url" data-k="button2Url" placeholder="https://…"></div>
+          </div>
+        </div></div>
+      <div class="row stack"><span class="desc">Labels are cut to 32 characters. Discord hides buttons on your own profile — everyone else sees them.</span></div>
+    </div>
+  </div>
+
+  <h2>Connection</h2>
+  <div class="card">
+    <div class="row"><span class="name">Discord Application ID</span>
+      <span class="status"><span class="dot" id="dot"></span><span id="statusText">…</span></span>
+      <div class="desc" style="color:inherit">
+        <div style="display:flex; gap:8px; margin-top:6px">
+          <input type="text" class="mono" id="clientId" placeholder="e.g. 1234567890123456789" spellcheck="false" autocomplete="off">
+          <button class="btn primary" id="connectBtn">Connect</button>
+        </div>
+        <ol>
+          <li>Open the <a id="devPortal">Discord Developer Portal</a> and click <b>New Application</b>.</li>
+          <li>Name it <b>Jam</b> — that's the “Listening to …” name friends see.</li>
+          <li>Copy the <b>Application ID</b> from <i>General Information</i> and paste it above.</li>
+          <li>Optional: under <i>Rich Presence → Art Assets</i>, upload <b>discord-asset-jam.png</b> with the key <b>jam</b>.</li>
+        </ol>
+      </div></div>
+  </div>
+
+  <h2>App</h2>
+  <div class="card">
+    <div class="row"><span class="name">Keep playing in the tray</span><label class="switch"><input type="checkbox" data-k="closeToTray"><span class="slider"></span></label>
+      <span class="desc">Closing the window hides it to the system tray instead of quitting.</span></div>
+    <div class="row"><span class="name">Reduce animations</span><label class="switch"><input type="checkbox" data-k="reduceMotion"><span class="slider"></span></label>
+      <span class="desc">Makes the site's animations and transitions instant. Saves CPU and GPU, especially on laptops. Applies right away.</span></div>
+  </div>
+</div>
+
+<div class="right">
+  <div class="ptitle"><h3>Preview</h3><span class="badge" id="badge">…</span></div>
+
+  <div class="plabel">Profile card</div>
+  <div class="dcard">
+    <div class="dhead"><span>Listening to <span id="pApp">Jam</span></span><span class="more">•••</span></div>
+    <div class="dbody">
+      <img class="art" id="pArt" alt="">
+      <div class="dtext">
+        <div class="d1" id="p1"></div>
+        <div class="d2" id="p2"></div>
+        <div class="d3" id="p3"></div>
+        <div class="bar" id="pBar"><span id="pCur">0:00</span><div class="track"><div class="fill" id="pFill"></div></div><span id="pEnd">0:00</span></div>
+        <div class="elapsed" id="pElapsed"></div>
+      </div>
+    </div>
+    <div class="dbtns" id="pBtns"></div>
+    <div class="dempty" id="pEmpty"></div>
+  </div>
+
+  <div class="plabel">Member list</div>
+  <div class="member">
+    <div class="avatar"></div>
+    <div style="min-width:0">
+      <div class="mname">You</div>
+      <div class="mstatus" id="mStatus"></div>
+    </div>
+  </div>
+  <div class="note" id="pNote"></div>
+
+  <details>
+    <summary>What gets sent to Discord</summary>
+    <pre id="payload"></pre>
+  </details>
+
+  <div class="reset"><button id="resetBtn" title="Reset the card's look to the defaults (keeps your Application ID)">↩ Reset to defaults</button></div>
+</div>
+</main>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  // The native close button sits in the header (Windows/Linux) or top-left (macOS).
+  const plat = new URLSearchParams(location.search).get('platform');
+  document.getElementById('hdr').classList.add(plat === 'darwin' ? 'mac' : 'win');
+  const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+  const ICON = '../build/icon.png';
+  const NOTE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex:none"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>';
+  const LABELS = { connected: 'Connected', connecting: 'Looking for Discord…', disabled: 'Off', 'no-client-id': 'Needs an Application ID', error: 'Discord rejected this ID' };
+
+  let settings = {};
+  let preview = null;
+
+  // ---------- form <-> settings
+  function fill(s) {
+    settings = s;
+    for (const el of $$('[data-k]')) {
+      const k = el.dataset.k;
+      if (el.type === 'checkbox') el.checked = !!s[k];
+      else if (document.activeElement !== el) el.value = s[k] ?? '';
+    }
+    $('clientId').value = s.discordClientId || '';
+    gate();
+  }
+
+  function gate() {
+    const on = $$('[data-k="rpcEnabled"]')[0].checked;
+    const hide = $$('[data-k="hideDetails"]')[0].checked;
+    $$('.gated').forEach((el) => el.classList.toggle('off', !on));
+    $$('.detail').forEach((el) => el.classList.toggle('off', !on || hide));
+    $$('.b1 input').forEach((el) => (el.disabled = !$$('[data-k="button1Enabled"]')[0].checked));
+    $$('.b2 input').forEach((el) => (el.disabled = !$$('[data-k="button2Enabled"]')[0].checked));
+    $$('.url').forEach((el) => el.classList.toggle('invalid', !!el.value.trim() && !/^https?:\/\/\S+$/i.test(el.value.trim())));
+  }
+
+  const timers = {};
+  function save(k, v, delay = 0) {
+    clearTimeout(timers[k]);
+    timers[k] = setTimeout(async () => { fill(await window.octave.saveSettings({ [k]: v })); }, delay);
+  }
+
+  for (const el of $$('[data-k]')) {
+    const k = el.dataset.k;
+    if (el.type === 'checkbox') el.addEventListener('change', () => { gate(); save(k, el.checked); });
+    else if (el.tagName === 'SELECT') el.addEventListener('change', () => save(k, el.value));
+    else el.addEventListener('input', () => { gate(); save(k, el.value, 250); });
+  }
+
+  // token chips under template fields
+  for (const input of $$('[data-template]')) {
+    const box = input.parentElement.querySelector('.chips');
+    if (!box) continue;
+    for (const t of ['{title}', '{artist}', '{album}', '{source}', '{app}']) {
+      const c = document.createElement('span');
+      c.className = 'chip'; c.textContent = t;
+      c.onmousedown = (e) => e.preventDefault();
+      c.onclick = () => {
+        const a = input.selectionStart ?? input.value.length, b = input.selectionEnd ?? a;
+        const needsSpace = a > 0 && !/\s$/.test(input.value.slice(0, a));
+        const ins = (needsSpace ? ' ' : '') + t;
+        input.value = input.value.slice(0, a) + ins + input.value.slice(b);
+        input.focus(); input.setSelectionRange(a + ins.length, a + ins.length);
+        input.dispatchEvent(new Event('input'));
+      };
+      box.appendChild(c);
+    }
+  }
+
+  // ---------- connection
+  function showStatus(s) {
+    const key = s && s.state ? s.state : s;
+    $('dot').className = 'dot ' + key;
+    let text = LABELS[key] || key;
+    if (key === 'connected' && s.user) text = 'Connected as ' + (s.user.global_name || s.user.username);
+    $('statusText').textContent = text;
+  }
+  const connect = async () => {
+    $('clientId').value = $('clientId').value.replace(/\D/g, '');
+    fill(await window.octave.saveSettings({ discordClientId: $('clientId').value }));
+  };
+  $('connectBtn').onclick = connect;
+  $('clientId').addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
+
+  // ---------- preview
+  const fmt = (ms) => {
+    const t = Math.max(0, Math.floor(ms / 1000)), h = Math.floor(t / 3600), m = Math.floor((t % 3600) / 60), s = t % 60;
+    return (h ? h + ':' + String(m).padStart(2, '0') : m) + ':' + String(s).padStart(2, '0');
+  };
+  const clean = (s) => (s || '').replace(/​/g, '');
+
+  function renderPreview(p) {
+    preview = p;
+    const a = p.activity;
+    $('pApp').textContent = p.appName;
+
+    const badge = $('badge');
+    if (!p.enabled) { badge.className = 'badge hidden'; badge.textContent = 'Off'; }
+    else if (!a) { badge.className = 'badge hidden'; badge.textContent = 'Hidden while paused'; }
+    else if (p.sample) { badge.className = 'badge sample'; badge.textContent = 'Sample track'; }
+    else if (!p.playing) { badge.className = 'badge paused'; badge.textContent = 'Paused'; }
+    else { badge.className = 'badge'; badge.textContent = 'Now playing'; }
+
+    const empty = $('pEmpty');
+    empty.classList.toggle('show', !p.enabled || !a);
+    empty.textContent = !p.enabled ? 'Rich Presence is off — nothing is shown on Discord.'
+      : 'Nothing is shown while paused. Turn on “Show when paused” to keep the card up.';
+
+    const act = a || {};
+    $('p1').textContent = clean(act.details);
+    $('p2').textContent = clean(act.state);
+    $('p3').textContent = clean(act.assets && act.assets.large_text);
+    const img = act.assets && act.assets.large_image;
+    const src = img && /^https:/i.test(img) ? img : ICON;
+    if ($('pArt').getAttribute('src') !== src) $('pArt').src = src;
+    $('pArt').title = img && !/^https:/i.test(img) ? `Art Asset: “${img}”` : '';
+
+    $('pBtns').innerHTML = '';
+    for (const b of act.buttons || []) {
+      const d = document.createElement('div'); d.className = 'dbtn'; d.textContent = b.label; $('pBtns').appendChild(d);
+    }
+
+    const member = p.memberText;
+    $('mStatus').innerHTML = member ? NOTE + '<span></span>' : '<span style="color:var(--faint)">No status</span>';
+    if (member) $('mStatus').querySelector('span').textContent = clean(member);
+
+    const notes = [];
+    if (p.sample) notes.push('Showing a sample song. Play something to preview it for real.');
+    if (img && !/^https:/i.test(img)) notes.push(`The artwork here is a stand-in for the “${img}” Art Asset.`);
+    $('pNote').textContent = notes.join(' ');
+
+    $('payload').textContent = JSON.stringify(a, null, 2);
+    tick();
+  }
+
+  // the progress bar moves on its own, like Discord's
+  function tick() {
+    const ts = preview && preview.activity && preview.activity.timestamps;
+    const now = Date.now();
+    $('pBar').style.display = ts && ts.end ? 'flex' : 'none';
+    $('pElapsed').style.display = ts && !ts.end ? 'block' : 'none';
+    if (!ts) return;
+    if (ts.end) {
+      const total = ts.end - ts.start, cur = Math.min(total, now - ts.start);
+      $('pCur').textContent = fmt(cur);
+      $('pEnd').textContent = fmt(total);
+      $('pFill').style.width = (100 * cur / total).toFixed(2) + '%';
+    } else {
+      $('pElapsed').textContent = fmt(now - ts.start) + ' elapsed';
+    }
+  }
+  setInterval(tick, 1000);
+  $('pArt').addEventListener('error', () => { if (!$('pArt').src.endsWith('icon.png')) $('pArt').src = ICON; });
+
+  // ---------- sources
+  function drmLine(d) {
+    if (d.widevine === 'loading') return ['Downloading the protected-playback module…', ''];
+    if (d.widevine === 'failed') return ['Protected playback could not start. Check your internet and restart Jam.', 'bad'];
+    switch (d.vmp) {
+      case 'signed': case 'not-needed': return ['Protected playback ready', 'ok'];
+      case 'needs-setup': return ['Needs a one-time setup to play (free castLabs signature)', 'warn', true];
+      case 'dev': return ['Unsigned development build', 'warn'];
+      default: return ['Protected playback isn\'t available in this build', 'bad'];
+    }
+  }
+  let lastSources = null;
+  let editing = null; // source id being edited, or 'new'
+
+  function editorFor(src, p) {
+    const isNew = !src;
+    const builtin = src && !src.custom;
+    const box = document.createElement('div'); box.className = 'editor';
+    const field = (label, value, ph, cls) => {
+      const f = document.createElement('div'); f.className = 'f';
+      const l = document.createElement('label'); l.textContent = label;
+      const i = document.createElement('input'); i.type = 'text'; i.value = value || ''; i.placeholder = ph || ''; if (cls) i.className = cls;
+      i.spellcheck = false; f.append(l, i); box.appendChild(f); return i;
+    };
+    const name = builtin ? null : field('Name', src ? src.name : '', 'e.g. Monochrome (mirror)');
+    const url = field('Link', src ? src.url : '', 'https://…', 'mono');
+    let color = src ? src.color : p.palette[(p.sources.filter((x) => x.custom).length) % p.palette.length];
+    let domains = null;
+    if (!builtin) {
+      const sw = document.createElement('div'); sw.className = 'f';
+      const l = document.createElement('label'); l.textContent = 'Color';
+      const row = document.createElement('div'); row.className = 'swatches';
+      for (const c of p.palette) {
+        const b = document.createElement('button'); b.className = 'sw' + (c === color ? ' on' : ''); b.style.background = c; b.title = c;
+        b.onclick = () => { color = c; row.querySelectorAll('.sw').forEach((x) => x.classList.toggle('on', x === b)); };
+        row.appendChild(b);
+      }
+      sw.append(l, row); box.appendChild(sw);
+      const adv = document.createElement('details'); adv.className = 'adv';
+      adv.innerHTML = '<summary>Advanced: other domains this site uses</summary>';
+      const inner = document.createElement('div'); inner.className = 'f'; inner.style.marginTop = '8px';
+      const il = document.createElement('label'); il.textContent = 'Pages on these domains stay inside Jam (e.g. a login or API domain). Separate with commas.';
+      domains = document.createElement('input'); domains.type = 'text'; domains.className = 'mono'; domains.placeholder = 'login.example.com, cdn.example.net';
+      domains.value = src ? (src.extraDomains || []).join(', ') : '';
+      inner.append(il, domains); adv.appendChild(inner); box.appendChild(adv);
+      if (src && src.extraDomains && src.extraDomains.length) adv.open = true;
+    }
+    const err = document.createElement('div'); err.className = 'err'; box.appendChild(err);
+    const bar = document.createElement('div'); bar.className = 'bar';
+    const save = document.createElement('button'); save.className = 'btn primary'; save.textContent = isNew ? 'Add source' : 'Save';
+    const cancel = document.createElement('button'); cancel.className = 'btn'; cancel.textContent = 'Cancel';
+    const grow = document.createElement('span'); grow.className = 'grow';
+    bar.append(save, cancel, grow);
+    if (builtin && src.customUrl) {
+      const reset = document.createElement('button'); reset.className = 'btn'; reset.textContent = 'Use original link';
+      reset.title = src.defaultUrl;
+      reset.onclick = async () => { editing = null; renderSources(await window.octave.resetSourceUrl(src.id)); };
+      bar.appendChild(reset);
+    }
+    if (src && src.custom) {
+      const rm = document.createElement('button'); rm.className = 'btn'; rm.textContent = 'Remove';
+      rm.style.color = '#fca5a5';
+      rm.onclick = async () => {
+        if (!confirm(`Remove ${src.name}? Its saved login and data are deleted too.`)) return;
+        editing = null; renderSources(await window.octave.removeSource(src.id));
+      };
+      bar.appendChild(rm);
+    }
+    box.appendChild(bar);
+    save.onclick = async () => {
+      save.disabled = true;
+      const r = await window.octave.saveSource({
+        id: src ? src.id : undefined, name: name ? name.value : undefined, url: url.value, color,
+        extraDomains: domains ? domains.value : undefined,
+      });
+      save.disabled = false;
+      if (r.error) { err.textContent = r.error; return; }
+      editing = null;
+      renderSources(r.payload);
+    };
+    cancel.onclick = () => { editing = null; renderSources(lastSources); };
+    box.addEventListener('keydown', (e) => { if (e.key === 'Enter') save.click(); if (e.key === 'Escape') { e.stopPropagation(); cancel.click(); } });
+    setTimeout(() => (name || url).focus(), 0);
+    return box;
+  }
+
+  function renderSources(p) {
+    lastSources = p;
+    const list = $('srcList');
+    list.innerHTML = '';
+    p.sources.forEach((src, i) => {
+      const row = document.createElement('div'); row.className = 'src';
+      const dot = document.createElement('span'); dot.className = 'sdot'; dot.style.background = src.color;
+      const name = document.createElement('div'); name.className = 'sname'; name.textContent = src.name;
+      if (src.custom) { const t = document.createElement('span'); t.className = 'tag custom'; t.textContent = 'Added by you'; name.appendChild(t); }
+      if (src.id === p.active) { const t = document.createElement('span'); t.className = 'tag'; t.textContent = 'Playing here'; name.appendChild(t); }
+      const acts = document.createElement('div'); acts.className = 'acts';
+      if (src.id !== p.active) {
+        const sw = document.createElement('button'); sw.className = 'btn primary'; sw.textContent = 'Switch';
+        if (i < 9) sw.title = 'Ctrl+' + (i + 1);
+        sw.onclick = async () => renderSources(await window.octave.switchSource(src.id));
+        acts.appendChild(sw);
+      }
+      if (!src.drm && src.kind !== 'engine') {
+        const ed = document.createElement('button'); ed.className = 'btn'; ed.textContent = src.custom ? 'Edit' : 'Change link';
+        ed.onclick = () => { editing = editing === src.id ? null : src.id; renderSources(lastSources); };
+        acts.appendChild(ed);
+      }
+      const out = document.createElement('button'); out.className = 'btn'; out.textContent = 'Sign out';
+      if (src.kind === 'engine') out.style.display = 'none'; // YouTube Music signs in/out from its own account menu
+      out.title = 'Forget your login and saved data for ' + src.name;
+      out.onclick = async () => {
+        if (!confirm(`Sign out of ${src.name} in Jam? This clears its saved login and data.`)) return;
+        renderSources(await window.octave.clearSource(src.id));
+      };
+      acts.appendChild(out);
+      row.append(dot, name, acts);
+      if (src.custom || src.customUrl) {
+        const u = document.createElement('div'); u.className = 'url'; u.textContent = src.url; u.title = src.url; row.appendChild(u);
+      }
+      const sub = document.createElement('div'); sub.className = 'sub';
+      if (src.drm) {
+        const [text, cls, setup] = drmLine(p.drm);
+        sub.className = 'sub ' + cls; sub.textContent = text;
+        if (setup) {
+          const b = document.createElement('button'); b.className = 'btn'; b.textContent = 'Set up';
+          b.style.padding = '3px 12px'; b.onclick = async () => { b.disabled = true; b.textContent = 'Opening…'; await window.octave.setupDrm(); b.textContent = 'Setup window opened'; };
+          sub.appendChild(b);
+        }
+      } else if (src.kind === 'engine') {
+        sub.className = 'sub' + (src.installed ? '' : ' bad');
+        sub.textContent = src.installed
+          ? 'Built-in app (based on Limusic) · sign in from its account menu · lyrics, scrobbling, video & more'
+          : 'Not included in this build';
+      } else {
+        sub.textContent = 'Login saved separately · no setup needed';
+      }
+      row.appendChild(sub);
+      if (editing === src.id) row.appendChild(editorFor(src, p));
+      list.appendChild(row);
+    });
+    if (editing === 'new') {
+      const row = document.createElement('div'); row.className = 'src';
+      const t = document.createElement('div'); t.className = 'sname'; t.style.gridColumn = '1 / -1'; t.textContent = 'New source';
+      row.append(t, editorFor(null, p));
+      list.appendChild(row);
+    }
+    const custom = p.sources.filter((x) => x.custom).length;
+    $('addSourceBtn').disabled = custom >= p.max || editing === 'new';
+    // keep "Open with" in sync with the list
+    const sel = $('defaultSource');
+    const cur = settings.defaultSource;
+    sel.innerHTML = '';
+    for (const x of p.sources) { const o = document.createElement('option'); o.value = x.id; o.textContent = x.name; sel.appendChild(o); }
+    sel.value = p.sources.some((x) => x.id === cur) ? cur : 'octave';
+  }
+  $('addSourceBtn').onclick = () => { editing = 'new'; renderSources(lastSources); };
+  function goto(section) {
+    const el = section === 'sources' ? $('sec-sources') : null;
+    if (el) el.scrollIntoView({ block: 'start' });
+  }
+
+  // ---------- misc
+  $('resetBtn').onclick = async () => { fill(await window.octave.resetPresence()); };
+  $('closeBtn').onclick = () => window.octave.close();
+  $('devPortal').onclick = () => window.octave.openExternal('https://discord.com/developers/applications');
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.octave.close(); });
+
+  (async () => {
+    fill(await window.octave.getSettings());
+    showStatus(await window.octave.getStatus());
+    renderPreview(await window.octave.getPreview());
+    window.octave.onStatus(showStatus);
+    window.octave.onPreview(renderPreview);
+    renderSources(await window.octave.getSources());
+    window.octave.onSources(renderSources);
+    window.octave.onGoto(goto);
+    goto(new URLSearchParams(location.search).get('section'));
+    if (!settings.discordClientId) $('clientId').focus({ preventScroll: true });
+  })();
+</script>
+</body>
+</html>

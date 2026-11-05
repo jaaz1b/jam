@@ -1,0 +1,14 @@
+# Jam
+/desktop/node_modules/
+/desktop/dist/
+/.ecs/
+# YouTube Music engine (Limusic fork)
+/ytm/target/
+/ytm/ui/node_modules/
+/ytm/ui/build/
+/ytm/ui/.svelte-kit/
+/ytm/src-tauri/libmpv-2.dll
+/ytm/.libmpv/
+/ytm/src-tauri/lastfm.keys
+/target/
+/ytm-dist/

@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' file: data:; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'">
+<title>Jam</title>
+<style>
+  :root { --h: 36px; --bg:#0f0f14; --text:#e6e6ee; --muted:#8e8e9e; --hover:rgba(255,255,255,.08); --accent:#a78bfa; }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); overflow:hidden; }
+  body { font:13px/1 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; color:var(--text); user-select:none; }
+  .bar { height:var(--h); display:flex; align-items:center; gap:2px; padding-left:8px; -webkit-app-region:drag; }
+  body.mac .bar { padding-left:78px; }
+  .brand { display:flex; align-items:center; gap:8px; padding:0 10px 0 4px; font-weight:600; letter-spacing:.01em; flex:none; }
+  .brand img { width:22px; height:22px; }
+  button { -webkit-app-region:no-drag; background:none; border:0; color:var(--muted); width:32px; height:28px; border-radius:6px;
+    display:grid; place-items:center; cursor:default; padding:0; flex:none; }
+  button:hover:not(:disabled) { background:var(--hover); color:var(--text); }
+  button:active:not(:disabled) { background:rgba(255,255,255,.12); }
+  button:disabled { opacity:.35; }
+  button svg { width:16px; height:16px; }
+  .np { flex:1; min-width:0; display:flex; justify-content:center; align-items:center; gap:7px; color:var(--muted); padding:0 12px; }
+  .np span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .np b { color:var(--text); font-weight:550; }
+  .np svg { width:13px; height:13px; flex:none; color:var(--accent); }
+  .np.paused svg { color:var(--muted); }
+  .right { display:flex; gap:2px; padding-right:6px; flex:none; }
+  .controls-space { flex:none; width:0; }
+  button.src { width:auto; padding:0 8px 0 9px; gap:7px; display:flex; align-items:center; color:var(--text); font:inherit; font-weight:550;
+    background:rgba(255,255,255,.05); border:1px solid rgba(255,255,255,.07); margin-right:6px; height:26px; border-radius:999px; }
+  button.src:hover { background:rgba(255,255,255,.1); }
+  button.src .dot { width:8px; height:8px; border-radius:50%; background:#8b5cf6; box-shadow:0 0 0 2px rgba(255,255,255,.06); }
+  button.src svg { width:12px; height:12px; color:var(--muted); }
+  .notice { -webkit-app-region:no-drag; display:none; align-items:center; gap:8px; margin-left:6px; padding:3px 4px 3px 10px; border-radius:999px;
+    font-size:12px; white-space:nowrap; max-width:46%; overflow:hidden; flex:none; }
+  .notice.show { display:flex; }
+  .notice span { overflow:hidden; text-overflow:ellipsis; }
+  .notice.info { background:rgba(167,139,250,.14); color:#d6c9ff; padding-right:10px; }
+  .notice.warn { background:rgba(245,158,11,.15); color:#fcd34d; }
+  .notice.error { background:rgba(239,68,68,.16); color:#fca5a5; }
+  .notice button { width:auto; height:20px; padding:0 9px; border-radius:999px; background:rgba(255,255,255,.12); color:#fff; font:inherit; font-weight:600; }
+  .notice button:hover { background:rgba(255,255,255,.2); }
+</style>
+</head>
+<body>
+  <div class="bar">
+    <div class="brand"><img src="../build/icon-small.png" alt="">Jam</div>
+    <button class="src" id="source" title="Switch source (Ctrl+1–4)"><span class="dot" id="srcDot"></span><span id="srcName">Octave</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg></button>
+    <button id="back" title="Back (Alt+←)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg></button>
+    <button id="forward" title="Forward (Alt+→)" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg></button>
+    <button id="reload" title="Reload (Ctrl+R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
+    <button id="home" title="Home (Ctrl+Shift+H)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></button>
+
+    <div class="notice" id="notice"><span id="noticeText"></span><button id="noticeBtn"></button></div>
+    <div class="np" id="np"></div>
+
+    <div class="right">
+      <button id="settings" title="Settings (Ctrl+,)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+      <button id="menu" title="Menu"><svg viewBox="0 0 24 24" fill="currentColor"><circle cx="5" cy="12" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="19" cy="12" r="1.8"/></svg></button>
+    </div>
+    <div class="controls-space" id="space"></div>
+  </div>
+<script>
+  const tb = window.titlebar;
+  document.body.classList.add(tb.platform === 'darwin' ? 'mac' : 'notmac');
+  for (const id of ['back', 'forward', 'reload', 'home', 'settings', 'menu']) {
+    document.getElementById(id).addEventListener('click', () => tb.action(id));
+  }
+  document.getElementById('source').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    tb.action('switcher', { x: r.left });
+  });
+  let noticeAction = null;
+  document.getElementById('noticeBtn').addEventListener('click', (e) => {
+    if (noticeAction === 'switcher') tb.action('switcher', { x: e.currentTarget.getBoundingClientRect().left });
+    else if (noticeAction) tb.action(noticeAction);
+  });
+  document.querySelector('.bar').addEventListener('dblclick', (e) => {
+    if (tb.platform === 'darwin' && !e.target.closest('button')) tb.action('zoom');
+  });
+
+  // Leave room for the native minimise / maximise / close buttons.
+  const space = document.getElementById('space');
+  function fitControls() {
+    const wco = navigator.windowControlsOverlay;
+    if (wco && wco.visible) {
+      const r = wco.getTitlebarAreaRect();
+      space.style.width = Math.max(0, window.innerWidth - (r.x + r.width)) + 'px';
+    } else {
+      space.style.width = tb.platform === 'darwin' ? '0px' : '138px';
+    }
+  }
+  if (navigator.windowControlsOverlay) navigator.windowControlsOverlay.addEventListener('geometrychange', fitControls);
+  window.addEventListener('resize', fitControls);
+  fitControls();
+
+  const NOTE = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>';
+  const PAUSE = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>';
+  const np = document.getElementById('np');
+  let last = '';
+  tb.onState((s) => {
+    document.getElementById('back').disabled = !s.canGoBack;
+    document.getElementById('forward').disabled = !s.canGoForward;
+    if (s.source) {
+      document.getElementById('srcName').textContent = s.source.name;
+      document.getElementById('srcDot').style.background = s.source.color;
+    }
+    const n = document.getElementById('notice');
+    n.className = 'notice' + (s.notice ? ' show ' + s.notice.kind : '');
+    if (s.notice) {
+      document.getElementById('noticeText').textContent = s.notice.text;
+      const b = document.getElementById('noticeBtn');
+      b.style.display = s.notice.button ? '' : 'none';
+      b.textContent = s.notice.button || '';
+      noticeAction = s.notice.action || null;
+    }
+    const key = JSON.stringify(s.np || null);
+    if (key === last) return;
+    last = key;
+    np.innerHTML = '';
+    np.classList.toggle('paused', !!(s.np && !s.np.playing));
+    if (!s.np) return;
+    np.innerHTML = (s.np.playing ? NOTE : PAUSE) + '<span><b></b><span class="a"></span></span>';
+    np.querySelector('b').textContent = s.np.title;
+    np.querySelector('.a').textContent = s.np.artist ? ' — ' + s.np.artist : '';
+    np.title = s.np.title + (s.np.artist ? ' — ' + s.np.artist : '');
+  });
+</script>
+</body>
+</html>

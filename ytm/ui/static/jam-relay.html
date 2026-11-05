@@ -1,0 +1,81 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Jam relay</title>
+</head>
+<body>
+<!--
+  Jam host mode (src-tauri/src/jamhost.rs). This page runs in the engine's hidden main window.
+  The real UI runs inside Jam's window; Jam forwards every invoke / listen to this page over a
+  local WebSocket, and this page performs it through Tauri exactly as the UI would have, then
+  sends back the result or the event. Nothing else is done here.
+-->
+<script>
+(() => {
+  const T = window.__TAURI_INTERNALS__;
+  const url = window.__JAM_HOST__;
+  const token = window.__JAM_TOKEN__;
+  if (!T || !url || !token) return;
+
+  const listeners = new Map(); // lid -> { event, eventId }
+  let ws = null;
+
+  const send = (m) => { if (ws && ws.readyState === 1) ws.send(JSON.stringify(m)); };
+
+  // Raw responses (tauri::ipc::Response) arrive as ArrayBuffer; JSON can't carry them.
+  const b64 = (u8) => {
+    let s = '';
+    for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000));
+    return btoa(s);
+  };
+  const encode = (v) => {
+    if (v instanceof ArrayBuffer) return { __jamB64: b64(new Uint8Array(v)) };
+    if (ArrayBuffer.isView(v)) return { __jamB64: b64(new Uint8Array(v.buffer, v.byteOffset, v.byteLength)) };
+    return v === undefined ? null : v;
+  };
+  const errText = (e) => (e && typeof e === 'object' && 'message' in e ? e.message : e);
+
+  async function handle(m) {
+    switch (m.t) {
+      case 'invoke':
+        try {
+          const v = await T.invoke(m.cmd, m.args || {});
+          send({ t: 'result', id: m.id, ok: true, value: encode(v) });
+        } catch (e) {
+          send({ t: 'result', id: m.id, ok: false, error: errText(e) });
+        }
+        break;
+      case 'listen': {
+        const handler = T.transformCallback((evt) => send({ t: 'event', lid: m.lid, data: evt }));
+        try {
+          const eventId = await T.invoke('plugin:event|listen', { event: m.event, target: { kind: 'Any' }, handler });
+          listeners.set(m.lid, { event: m.event, eventId });
+        } catch (e) {
+          send({ t: 'log', msg: 'listen failed: ' + m.event + ': ' + errText(e) });
+        }
+        break;
+      }
+      case 'unlisten': {
+        const l = listeners.get(m.lid);
+        if (!l) break;
+        listeners.delete(m.lid);
+        try { window.__TAURI_EVENT_PLUGIN_INTERNALS__ && window.__TAURI_EVENT_PLUGIN_INTERNALS__.unregisterListener(l.event, l.eventId); } catch (e) {}
+        T.invoke('plugin:event|unlisten', { event: l.event, eventId: l.eventId }).catch(() => {});
+        break;
+      }
+      case 'quit':
+        T.invoke('plugin:process|exit', { code: 0 }).catch(() => {});
+        break;
+    }
+  }
+
+  ws = new WebSocket(url);
+  ws.onopen = () => send({ t: 'hello', token });
+  ws.onmessage = (e) => { let m; try { m = JSON.parse(e.data); } catch (x) { return; } handle(m); };
+  // Jam went away (quit or crashed): don't linger as an invisible process.
+  ws.onclose = () => { T.invoke('plugin:process|exit', { code: 0 }).catch(() => {}); };
+})();
+</script>
+</body>
+</html>

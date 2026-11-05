@@ -1,0 +1,86 @@
+{
+  "name": "octave-desktop",
+  "productName": "Jam",
+  "version": "3.0.0",
+  "description": "Jam",
+  "main": "src/main.js",
+  "author": "Jam",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "start": "electron .",
+    "dist:win": "electron-builder --win",
+    "dist:mac": "electron-builder --mac",
+    "dist:linux": "electron-builder --linux"
+  },
+  "devDependencies": {
+    "electron": "^45.2.3",
+    "electron-builder": "^26.18.0"
+  },
+  "build": {
+    "appId": "com.octavestreaming.desktop",
+    "productName": "Jam",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "build/icon.png",
+      "build/icon-small.png",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icon.ico",
+      "artifactName": "Jam-Portable-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Jam",
+      "artifactName": "Jam-Setup-${version}.${ext}",
+      "uninstallDisplayName": "Jam"
+    },
+    "mac": {
+      "target": "dmg",
+      "icon": "build/icon.png",
+      "category": "public.app-category.music"
+    },
+    "linux": {
+      "target": "AppImage",
+      "icon": "build/icon.png",
+      "category": "Audio"
+    },
+    "publish": null,
+    "electronVersion": "45.2.1",
+    "electronDist": "../.ecs/win",
+    "extraResources": [
+      {
+        "from": "build/drm-setup.ps1",
+        "to": "drm-setup.ps1"
+      },
+      {
+        "from": "../ytm-dist",
+        "to": "ytm"
+      }
+    ]
+  },
+  "dependencies": {
+    "ws": "^8.22.1"
+  }
+}
