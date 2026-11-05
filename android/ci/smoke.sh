@@ -10,7 +10,7 @@ adb install -r -g "$APK" || { echo "install failed"; exit 1; }
 adb logcat -c
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 
-adb shell am start -W -n "$PKG/$ACT"
+timeout 60 adb shell am start -W -n "$PKG/$ACT"
 sleep 30; shot 1-octave
 n=2
 for s in monochrome ytm spotify apple; do
@@ -41,10 +41,11 @@ fi
 # that plays a quiet tone straight into Jam's settings, start it, leave the app, turn the screen off,
 # then check the audio kept going.
 if [ -n "$DEBUG_APK" ]; then
-  (cd "$(dirname "$0")" && python3 -m http.server 8000 >/dev/null 2>&1 &)
+  python3 -m http.server 8000 --directory "$(dirname "$0")" </dev/null >/dev/null 2>&1 &
+  SERVER=$!
   adb install -r -g "$DEBUG_APK" || echo "debug install failed"
   adb shell am force-stop "$PKG"
-  adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
+  timeout 30 adb root </dev/null >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
   python3 - "http://10.0.2.2:8000/test-player.html" > "$OUT/jam.xml" <<'PY'
 import json, sys
 from xml.sax.saxutils import escape
@@ -54,7 +55,7 @@ print("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <str
 PY
   adb push "$OUT/jam.xml" /data/local/tmp/jam.xml >/dev/null
   adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam.xml $D/shared_prefs/jam.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam.xml; chmod 660 $D/shared_prefs/jam.xml; restorecon -R $D/shared_prefs'
-  adb shell am start -W -n "$PKG/$ACT"
+  timeout 60 adb shell am start -W -n "$PKG/$ACT"
   sleep 20; shot 9-test-playing
   adb shell input keyevent HOME; sleep 20
   adb shell input keyevent KEYCODE_SLEEP; sleep 45
@@ -63,10 +64,10 @@ PY
   adb shell dumpsys notification --noredact > "$OUT/notification.txt"
   adb shell pidof "$PKG" > "$OUT/pid.txt" || echo "not running" > "$OUT/pid.txt"
   adb shell input keyevent KEYCODE_WAKEUP; sleep 2
-  adb shell wm dismiss-keyguard 2>/dev/null; sleep 2
+  timeout 10 adb shell wm dismiss-keyguard </dev/null 2>/dev/null; sleep 2
   adb shell cmd statusbar expand-notifications; sleep 3; shot 10-notifications
   adb shell cmd statusbar collapse; sleep 1
-  adb shell am start -W -n "$PKG/$ACT"; sleep 4; shot 11-back-in-app
+  timeout 60 adb shell am start -W -n "$PKG/$ACT"; sleep 4; shot 11-back-in-app
   echo "--- background playback ---"
   echo "Jam pid: $(cat "$OUT/pid.txt")"
   JUID=$(adb shell stat -c %u /data/data/$PKG | tr -d '\r')
@@ -74,6 +75,7 @@ PY
   grep -E "u/pid:$JUID/" "$OUT/audio.txt" | cut -c1-200 | head -5
   awk '/app.jam.android/{f=1} f&&/state=PlaybackState/{print; exit}' "$OUT/media_session.txt" | cut -c1-200
   grep -c "pkg=app.jam.android" "$OUT/notification.txt" | sed 's/^/Jam notifications: /'
+  kill "$SERVER" 2>/dev/null
 fi
 
 adb shell dumpsys package "$PKG" | grep -E "versionName|versionCode" > "$OUT/version.txt"
