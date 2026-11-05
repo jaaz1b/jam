@@ -44,7 +44,8 @@ android {
                 keyPassword = "android"
             }
         }
-        getByName("debug") {
+        // Not named "debug": the Tauri CLI edits the first `getByName("debug")` block it finds.
+        create("jamDebug") {
             storeFile = debugKs
             storePassword = "android"
             keyAlias = "androiddebugkey"
@@ -53,11 +54,11 @@ android {
     }
     buildTypes {
         getByName("debug") {
-            // Same id as release: the CI test installs one over the other.
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("jamDebug")
             packaging {
                 jniLibs.keepDebugSymbols.add("*/arm64-v8a/*.so")
                 jniLibs.keepDebugSymbols.add("*/x86_64/*.so")
