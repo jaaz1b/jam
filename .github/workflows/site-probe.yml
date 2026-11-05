@@ -30,7 +30,7 @@ jobs:
             case "$f" in http*) u="$f";; /*) u="$ORIGIN$f";; *) u="$ORIGIN/$f";; esac
             code=$(curl -sSL -A "$UA" -o body -w '%{http_code} %{content_type}' "$u")
             echo "=== $u -> $code"
-            case "$code" in 200*) head -c 8000 body; echo;; esac
+            case "$code" in 200*) head -c 80000 body | fold -w 3000; echo;; esac
           done
           echo "=== scripts referenced"
           grep -oE 'src="[^"]+\.js"' index.html | head -20
