@@ -94,7 +94,8 @@
       log('page', (navigator.onLine ? 'online' : 'offline') + ' · controlled=' + !!(navigator.serviceWorker && navigator.serviceWorker.controller) + ' · ' + navigator.userAgent.slice(0, 120));
       if (!navigator.serviceWorker) { lastError = 'this WebView has no service workers'; report('no-sw'); return; }
       if (!navigator.onLine) { report('offline'); return; }
-      navigator.serviceWorker.getRegistration('/').then(function (r) {
+      // Whatever covers this page, at any scope: a site whose worker lives elsewhere keeps it.
+      navigator.serviceWorker.getRegistration().then(function (r) {
         if (r) { log('jam-found', JSON.stringify(regInfo(r))); return r; }
         log('jam-register', '/sw.js');
         return navigator.serviceWorker.register('/sw.js', { scope: '/' });
