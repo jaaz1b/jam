@@ -231,6 +231,7 @@
 				? 'text-foreground'
 				: ''}"
 			onclick={toggleDiscord}
+			hidden={(globalThis as any).__TAURI_INTERNALS__?.__jam}
 			title={discordOn ? t('integrations.discord_tooltip_on') : t('integrations.discord_tooltip_off')}
 			aria-label={t('settings.general.discord_rpc')}
 		>

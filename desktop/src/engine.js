@@ -69,7 +69,8 @@ class Engine extends EventEmitter {
           this.child = spawn(this.bin, [], {
             cwd: this.cwd,
             env: { ...process.env, JAM_HOST: `ws://127.0.0.1:${port}`, JAM_TOKEN: token },
-            stdio: 'ignore',
+            // JAM_YTM_DEBUG=1 shows the engine's own output (for troubleshooting).
+            stdio: process.env.JAM_YTM_DEBUG ? ['ignore', 'inherit', 'inherit'] : 'ignore',
             windowsHide: true,
           });
         } catch (e) { fail(e); return; }

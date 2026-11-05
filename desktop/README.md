@@ -9,6 +9,7 @@ between them instantly:
 | Monochrome | 2 | Lossless / Hi-Res by default |
 | Spotify | 3 | Needs the one-time setup below |
 | Apple Music | 4 | Needs the one-time setup below |
+| YouTube Music | 5 | Built-in app (based on Limusic): lyrics, scrobbling, video, speed/pitch/reverb, Listen Together… |
 
 Jam always loads each live site, so you get every update automatically. Each service keeps its own saved login.
 
@@ -30,6 +31,20 @@ Click **More info → Run anyway**.
 - **Settings → Sources**: pick the service Jam opens with (default Octave), or start where you left off.
   You can also choose how long a switched-away service stays ready for an instant switch back, and sign
   out of any one service. The service you switch away from is paused automatically.
+
+## YouTube Music (built-in app)
+
+YouTube Music isn't a website in Jam. It's a full app, **Limusic** rebuilt into Jam, with its own engine
+(ad-free audio through libmpv) and its interface shown right in Jam's window. Everything Limusic does works
+here: search and library, sign-in (several accounts), synced word-by-word lyrics, music videos, mini player,
+speed/pitch/reverb, local music, Last.fm and ListenBrainz scrobbling, Listen Together, themes, and 18+ languages.
+
+- Sign in from its account menu (top right inside YouTube Music). The login is saved by its engine.
+- Jam's Discord status, title bar, tray, media keys and pause-on-switch all follow it like any other source.
+- Its own settings (gear icon inside YouTube Music) cover playback, lyrics, scrobbling, themes and hotkeys.
+  Discord is configured in Jam's Settings for every source at once.
+- Last.fm needs an API key at build time (repo secrets `LASTFM_API_KEY` / `LASTFM_API_SECRET`).
+  ListenBrainz works without one.
 
 ## Adding your own sources
 

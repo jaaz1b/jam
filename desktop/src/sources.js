@@ -52,7 +52,7 @@ const BUILTIN = [
     id: 'ytm',
     name: 'YouTube Music',
     kind: 'engine',
-    url: 'jamytm://app/index.html',
+    url: 'jamytm://app/',
     domains: ['music.youtube.com', 'youtube.com', 'youtu.be', 'googleusercontent.com', 'ytimg.com'],
     partition: 'persist:jam-ytm',
     drm: false,

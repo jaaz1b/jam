@@ -11,8 +11,6 @@ const { HOOK, control, REDUCE_MOTION_CSS } = require('./page-scripts');
 const presence = require('./presence');
 const sources = require('./sources');
 const { Engine, locate: locateEngine } = require('./engine');
-const { SHIM: TAURI_SHIM } = require('./tauri-shim');
-const { pathToFileURL } = require('url');
 const { SOURCES, byId, belongsTo, hostOf, matches } = sources;
 
 // Sign-in providers that should open as an in-app popup (sharing the source's saved login).
@@ -355,6 +353,11 @@ let engine = null;
 let engineLoc = null;
 const ytm = { np: null, playing: false, position: 0, duration: null, posAt: 0, lastKey: '' };
 
+function engineInstalled() {
+  if (!engineLoc) engineLoc = locateEngine(app);
+  return fs.existsSync(engineLoc.bin);
+}
+
 function getEngine() {
   if (!engineLoc) engineLoc = locateEngine(app);
   if (!engine) {
@@ -362,6 +365,7 @@ function getEngine() {
     // Jam's own presence, title bar, tray and pause-on-switch follow the engine's player.
     for (const ev of ['now-playing', 'playback-state', 'position', 'duration']) engine.subscribe(ev);
     engine.on('event', onEngineEvent);
+    engine.on('event', (name, payload) => sendYtmEvent(name, payload)); // → the UI's own listeners
     engine.on('down', (intentional) => {
       ytm.np = null; ytm.playing = false;
       if (activeId === 'ytm') onNowPlaying(null);
@@ -425,13 +429,33 @@ function reportEngine(always) {
     currentTime: position,
     duration: ytm.duration,
     docTitle: '',
-    url: np.videoId ? `https://music.youtube.com/watch?v=${encodeURIComponent(np.videoId)}` : 'https://music.youtube.com/',
+    // Only real YouTube ids (11 chars) get a watch link; local files and podcasts link to the home page.
+    url: /^[A-Za-z0-9_-]{11}$/.test(np.videoId || '') ? `https://music.youtube.com/watch?v=${np.videoId}` : 'https://music.youtube.com/',
   }, byId('ytm'));
 }
 
 function sendYtmEvent(event, payload) {
   const e = views.get('ytm');
   if (e && !e.view.webContents.isDestroyed()) e.view.webContents.send('ytm:event', event, payload);
+}
+
+const MIME = {
+  html: 'text/html; charset=utf-8', js: 'text/javascript; charset=utf-8', mjs: 'text/javascript; charset=utf-8',
+  css: 'text/css; charset=utf-8', json: 'application/json', svg: 'image/svg+xml', png: 'image/png', jpg: 'image/jpeg',
+  jpeg: 'image/jpeg', webp: 'image/webp', gif: 'image/gif', avif: 'image/avif', ico: 'image/x-icon', jxl: 'image/jxl',
+  woff: 'font/woff', woff2: 'font/woff2', ttf: 'font/ttf', otf: 'font/otf', wasm: 'application/wasm', txt: 'text/plain; charset=utf-8',
+  mp3: 'audio/mpeg', flac: 'audio/flac', m4a: 'audio/mp4', ogg: 'audio/ogg', opus: 'audio/ogg', wav: 'audio/wav', mp4: 'video/mp4', webm: 'video/webm',
+};
+async function serveFile(file) {
+  try {
+    const st = await fs.promises.stat(file);
+    if (!st.isFile()) throw new Error('not a file');
+    const ext = path.extname(file).slice(1).toLowerCase();
+    const body = await fs.promises.readFile(file);
+    return new Response(body, { status: 200, headers: { 'content-type': MIME[ext] || 'application/octet-stream', 'cache-control': 'no-cache' } });
+  } catch {
+    return new Response('Not found', { status: 404 });
+  }
 }
 
 // Serves the UI (jamytm://app/…, single-page app with index.html fallback) and the local files
@@ -444,20 +468,18 @@ function prepareYtmSession(ses) {
     const u = new URL(req.url);
     if (u.host === 'asset') {
       const file = decodeURIComponent(u.pathname.slice(1));
-      try { if (!path.isAbsolute(file) || !fs.statSync(file).isFile()) throw 0; } catch { return new Response('Not found', { status: 404 }); }
-      return net.fetch(pathToFileURL(file).href, { headers: req.headers });
+      if (!path.isAbsolute(file)) return new Response('Not found', { status: 404 });
+      return serveFile(file);
     }
     if (u.host !== 'app') return new Response('Not found', { status: 404 });
     const root = path.resolve(engineLoc.ui);
-    let rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
-    let file = path.resolve(root, rel || 'index.html');
-    if (!file.startsWith(root)) return new Response('Forbidden', { status: 403 });
-    try { if (!fs.statSync(file).isFile()) throw 0; } catch {
-      // Client-side routes: let the app's router handle them. Real files that are missing 404.
-      if (/\.[a-z0-9]+$/i.test(rel)) return new Response('Not found', { status: 404 });
-      file = path.join(root, 'index.html');
-    }
-    return net.fetch(pathToFileURL(file).href);
+    const rel = decodeURIComponent(u.pathname).replace(/^\/+/, '');
+    const file = path.resolve(root, rel || 'index.html');
+    if (file !== root && !file.startsWith(root + path.sep)) return new Response('Forbidden', { status: 403 });
+    const r = await serveFile(file);
+    // Client-side routes (no extension) fall back to the app shell; missing real files stay 404.
+    if (r.status === 404 && !/\.[a-z0-9]+$/i.test(rel)) return serveFile(path.join(root, 'index.html'));
+    return r;
   });
   const ALLOWED = new Set(['media', 'notifications', 'fullscreen', 'clipboard-sanitized-write']);
   ses.setPermissionRequestHandler((_wc, perm, cb) => cb(ALLOWED.has(perm)));
@@ -477,7 +499,6 @@ function createEngineView(src) {
       sandbox: true,
       backgroundThrottling: true,
       spellcheck: false,
-      additionalArguments: ['--jam-tauri-shim=' + Buffer.from(TAURI_SHIM).toString('base64')],
     },
   });
   entry.view.setBackgroundColor(BG);
@@ -1026,7 +1047,7 @@ function sourcesPayload() {
     sources: SOURCES.map((s) => ({
       id: s.id, name: s.name, color: s.color, drm: s.drm, url: s.url, loaded: views.has(s.id),
       custom: !!s.custom, customUrl: !!s.customUrl, defaultUrl: s.defaultUrl || null, extraDomains: s.extraDomains || [],
-      kind: s.kind || 'web', installed: s.kind === 'engine' ? !!(engineLoc && fs.existsSync(engineLoc.bin)) : true,
+      kind: s.kind || 'web', installed: s.kind === 'engine' ? engineInstalled() : true,
     })),
     palette: sources.PALETTE,
     max: sources.MAX_CUSTOM,

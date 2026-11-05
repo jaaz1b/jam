@@ -23,9 +23,11 @@ def edit(path, pairs, required=True):
     s = p.read_text(encoding='utf-8')
     out = s
     for old, new in pairs:
+        if new in out:
+            continue  # already applied
         if old in out:
             out = out.replace(old, new)
-        elif new not in out and required:
+        elif required:
             print(f'!! pattern not found in {p.relative_to(ROOT)}: {old[:70]!r}', file=sys.stderr)
     if out != s:
         p.write_text(out, encoding='utf-8')
@@ -80,6 +82,11 @@ s2 = re.sub(r"(\.\.\.\(\(globalThis as any\)\.__TAURI_INTERNALS__\?\.__jam \? \[
             r"\1]),", s)
 if s2 != s:
     p.write_text(s2, encoding='utf-8')
+# The Discord toggle in the toolbar drives this app's own presence, which is off inside Jam.
+edit(UI / 'components' / 'Titlebar.svelte', [
+    ('\t\t\tonclick={toggleDiscord}\n',
+     '\t\t\tonclick={toggleDiscord}\n\t\t\thidden={(globalThis as any).__TAURI_INTERNALS__?.__jam}\n'),
+])
 edit(UI / 'components' / 'DiscordCard.svelte', [("cfg.app_name.trim() || 'Limusic'", "cfg.app_name.trim() || 'Jam'")], required=False)
 
 # ---------------------------------------------------------------- engine: names the user sees
@@ -93,5 +100,15 @@ edit(RS / 'lib.rs', [
     ('"Limusic could not start its audio event loop"', '"Jam (YouTube Music) could not start its audio event loop"'),
 ])
 edit(RS / 'diagnostics.rs', [('"Limusic {} ({} {}, {})",', '"Jam YouTube Music {} ({} {}, {}), based on Limusic",')], required=False)
+
+# ---------------------------------------------------------------- icons: the Jam jar
+import shutil, filecmp
+ASSETS = ROOT / 'jam-assets'
+pairs = [(ASSETS / 'favicon.svg', UI / 'assets' / 'favicon.svg')]
+pairs += [(f, ROOT / 'src-tauri' / 'icons' / f.name) for f in sorted((ASSETS / 'icons').iterdir())]
+for src, dst in pairs:
+    if not dst.exists() or not filecmp.cmp(src, dst, shallow=False):
+        shutil.copyfile(src, dst)
+        changed.append(str(dst.relative_to(ROOT)))
 
 print('rebranded:' if changed else 'already rebranded', *changed, sep='\n  ')

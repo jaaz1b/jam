@@ -661,7 +661,8 @@ pub fn run() {
     // the two fight over it, which is what the guard exists to prevent:
     //
     //     LIMUSIC_MULTI=1 XDG_DATA_HOME=/tmp/limusic-b ./target/debug/limusic-app
-    if std::env::var_os("LIMUSIC_MULTI").is_none() {
+    // In Jam, Jam owns the engine's lifecycle and runs exactly one (jamhost.rs).
+    if std::env::var_os("LIMUSIC_MULTI").is_none() && !jamhost::active() {
         builder = builder.plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             tray::show_main(app);
             // `limusic-app <link>` against this instance (#348). argv[0] leads on every platform.
