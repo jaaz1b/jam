@@ -222,6 +222,7 @@ class MainActivity : TauriActivity() {
         engineLoading?.let { container.removeView(it) }
         engineLoading = null
         deliverLink()
+        updateEngineVisibility()
     }
 
     private var engineLoading: View? = null
@@ -241,6 +242,37 @@ class MainActivity : TauriActivity() {
     override fun onResume() {
         super.onResume()
         reconcileSources()
+    }
+
+    private var started = false
+    private var engineShown: Boolean? = null
+
+    override fun onStart() {
+        super.onStart()
+        started = true
+        updateEngineVisibility()
+    }
+
+    override fun onStop() {
+        started = false
+        updateEngineVisibility()
+        super.onStop()
+    }
+
+    /**
+     * Tells YouTube Music's UI when nobody can see it (Jam in the background, or another source on
+     * screen), the same `ui-visible` signal desktop sends from the tray, so it stops restyling for
+     * nobody. Playback carries on regardless: it's the engine's, not the page's.
+     */
+    private fun updateEngineVisibility() {
+        val wv = engineView ?: return
+        val shown = started && active == Sources.YTM
+        if (shown == engineShown) return
+        engineShown = shown
+        wv.evaluateJavascript(
+            "window.__TAURI_INTERNALS__&&window.__TAURI_INTERNALS__.invoke('plugin:event|emit',{event:'ui-visible',payload:$shown})",
+            null,
+        )
     }
 
     // Deliberately no WebView.onPause()/pauseTimers(): music keeps playing in the background.
@@ -379,6 +411,7 @@ class MainActivity : TauriActivity() {
             if (e != null) { e.visibility = View.VISIBLE; e.requestFocus() } else showEngineLoading()
             progress.visibility = View.INVISIBLE
             renderChips()
+            updateEngineVisibility()
             return
         }
         discardTimers.remove(id)?.let { main.removeCallbacks(it) }
@@ -392,6 +425,7 @@ class MainActivity : TauriActivity() {
         if (prev != id) Player.clear(this)
         progress.visibility = if (v.progress in 1..99) View.VISIBLE else View.INVISIBLE
         renderChips()
+        updateEngineVisibility()
     }
 
     private fun scheduleDiscard(id: String) {

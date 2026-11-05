@@ -1521,3 +1521,18 @@ input[type='range'].range:active::-webkit-slider-thumb {
 html.jam-android [data-page-title] {
 	display: none;
 }
+
+/* Jam for Android: the app's own pop-ups (add to playlist, share, shortcut picker) rise from the
+   bottom as full-width sheets, like the dialogs. */
+html.jam-android [data-sheet] {
+	align-items: flex-end;
+	padding: 0;
+}
+html.jam-android [data-sheet] > * {
+	width: 100%;
+	max-width: none;
+	max-height: 88dvh;
+	border-radius: 1.75rem 1.75rem 0 0;
+	border-bottom-width: 0;
+	padding-bottom: calc(1.25rem + env(safe-area-inset-bottom));
+}

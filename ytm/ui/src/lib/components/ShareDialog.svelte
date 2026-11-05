@@ -150,6 +150,7 @@
 {#if ui.share}
 	<div
 		transition:fade={{ duration: 150 }}
+		data-sheet
 		class="fixed inset-0 z-[49] flex items-center justify-center bg-black/50 p-4 {windowCorners()}"
 		role="presentation"
 		onclick={(e) => {

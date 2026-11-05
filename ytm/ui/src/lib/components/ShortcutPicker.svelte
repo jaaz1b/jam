@@ -31,7 +31,8 @@
 
 <div
 	transition:fade={{ duration: 150 }}
-	class="fixed inset-0 z-[49] flex items-center justify-center bg-black/50 p-4 {windowCorners()}"
+	data-sheet
+		class="fixed inset-0 z-[49] flex items-center justify-center bg-black/50 p-4 {windowCorners()}"
 >
 	<div
 		transition:scale={{ duration: 180, start: 0.96, easing: cubicOut }}

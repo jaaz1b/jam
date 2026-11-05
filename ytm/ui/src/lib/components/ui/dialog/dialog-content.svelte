@@ -9,6 +9,7 @@
 	import { HugeiconsIcon } from "@hugeicons/svelte"
 	import { Cancel01Icon } from '@hugeicons/core-free-icons';
 	import { t } from '$lib/i18n.svelte';
+	import { phone } from '$lib/phone';
 
 	let {
 		ref = $bindable(null),
@@ -35,13 +36,16 @@
 	     its content's longest unbreakable line, and a `truncate` line counts at full length. A
 	     wide font made one such line in the Scrobbling tab overflow the dialog's own max width,
 	     clipping its right edge, and any dialog with a long enough truncated line does the same. -->
-	<div class="pointer-events-none fixed inset-0 z-50 flex items-center justify-center">
+	<!-- Jam for Android: dialogs are bottom sheets, full width, scrolling inside when tall. -->
+	<div class="pointer-events-none fixed inset-0 z-50 flex justify-center {phone ? 'items-end' : 'items-center'}">
 		<DialogPrimitive.Content
 			bind:ref
 			data-slot="dialog-content"
 			class={cn(
 				"bg-popover text-popover-foreground data-open:animate-in data-closed:animate-out data-closed:fade-out-0 data-open:fade-in-0 data-closed:zoom-out-95 data-open:zoom-in-95 ring-foreground/5 grid grid-cols-[minmax(0,1fr)] max-w-[calc(100%-2rem)] gap-6 rounded-4xl p-6 text-sm ring-1 duration-100 sm:max-w-md pointer-events-auto relative w-full outline-none",
-				className
+				className,
+				phone &&
+					"max-w-full sm:max-w-full max-h-[88dvh] overflow-y-auto overscroll-contain rounded-b-none rounded-t-[1.75rem] px-5 pt-6 pb-[calc(1.25rem+env(safe-area-inset-bottom))] data-open:slide-in-from-bottom-8 data-open:zoom-in-100 data-closed:zoom-out-100"
 			)}
 			{...restProps}
 			onInteractOutside={(e) => {

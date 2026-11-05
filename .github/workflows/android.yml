@@ -101,6 +101,11 @@ jobs:
           distribution: temurin
           java-version: 17
 
+      # Caches the Gradle wrapper's download (a 504 from GitHub's CDN failed a build) and Gradle's deps.
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          cache-read-only: false
+
       - name: YouTube Music UI (Svelte)
         run: cd ytm/ui && pnpm install --frozen-lockfile && pnpm build
 
@@ -155,6 +160,8 @@ jobs:
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           cd ytm/src-tauri
+          # The wrapper's Gradle download can hit a CDN hiccup: prefetch it with retries first.
+          for i in 1 2 3; do (cd gen/android && ./gradlew --version >/dev/null) && break; sleep 20; done
           tauri android build --apk --split-per-abi --target aarch64 --target x86_64 \
             --config '{"build":{"beforeBuildCommand":""}}'
 

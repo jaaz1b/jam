@@ -18,6 +18,7 @@
 	import { t } from '$lib/i18n.svelte';
 	import { ui, toast, addSongsToPlaylists, openNewPlaylist, savedIn } from '$lib/player.svelte';
 	import { Button } from '$lib/components/ui/button';
+	import { phone } from '$lib/phone';
 
 	let playlists = $state<BrowseItem[]>([]);
 	let loading = $state(false);
@@ -30,8 +31,9 @@
 	let dir = $state(1);
 	// `autofocus` is unreliable on an element inserted after load (and mid-transition), so focus it
 	// ourselves the frame it exists: the modal opens ready to type, the duplicates step ready to Enter.
+	// Not on a phone: there it would throw the keyboard over the list the user came to tick.
 	$effect(() => {
-		box?.focus();
+		if (!phone) box?.focus();
 	});
 	$effect(() => {
 		skipBtn?.focus();
@@ -136,6 +138,7 @@
 {#if ui.addSongs}
 	<div
 		transition:fade={{ duration: 150 }}
+		data-sheet
 		class="fixed inset-0 z-[49] flex items-center justify-center bg-black/50 p-4 {windowCorners()}"
 		role="presentation"
 		onclick={(e) => {
