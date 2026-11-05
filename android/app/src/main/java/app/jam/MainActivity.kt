@@ -113,6 +113,7 @@ class MainActivity : AppCompatActivity() {
     private var hook = ""
     private var keepAlive = ""
     private var desktopJs = ""
+    private var mediaSessionJs = ""
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
     private var fileCallback: ValueCallback<Array<Uri>>? = null
@@ -135,6 +136,7 @@ class MainActivity : AppCompatActivity() {
         hook = assets.open("jam-hook.js").bufferedReader().readText()
         keepAlive = assets.open("keepalive.js").bufferedReader().readText()
         desktopJs = assets.open("desktop-site.js").bufferedReader().readText()
+        mediaSessionJs = assets.open("mediasession.js").bufferedReader().readText()
         cleanUpProfiles()
         buildUi()
         Player.controller = { action -> control(action) }
@@ -434,6 +436,7 @@ class MainActivity : AppCompatActivity() {
     private fun pageScript(src: Source) = buildString {
         append("if (window === window.top) {\n")
         append(keepAlive).append('\n')
+        append(mediaSessionJs).append('\n')
         if (src.desktopSite) append(desktopJs).append('\n')
         append(hook)
         append("\n}")

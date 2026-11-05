@@ -75,6 +75,7 @@ PY
   grep -E "u/pid:$JUID/" "$OUT/audio.txt" | cut -c1-200 | head -5
   awk '/app.jam.android/{f=1} f&&/state=PlaybackState/{print; exit}' "$OUT/media_session.txt" | cut -c1-200
   grep -c "pkg=app.jam.android" "$OUT/notification.txt" | sed 's/^/Jam notifications: /'
+  grep -q "Background test tone" "$OUT/media_session.txt" "$OUT/notification.txt" && echo "Song title reached the notification" || echo "Song title MISSING from the notification"
   kill "$SERVER" 2>/dev/null
 fi
 
