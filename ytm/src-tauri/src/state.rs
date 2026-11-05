@@ -1213,6 +1213,7 @@ impl AppState {
     ) -> Result<PlaybackData, ResolveError> {
         // A downloaded song plays from disk, with or without a connection (downloads.rs).
         if let Some(data) = crate::downloads::playable(video_id) {
+            tracing::info!(video_id, "playing the downloaded file");
             return Ok(data);
         }
         // A local file is its own "stream": no network, no cache, no extraction (local.rs).

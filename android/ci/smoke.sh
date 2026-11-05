@@ -99,31 +99,41 @@ PY
   summary "tap: '$1' not found"; return 1
 }
 adb shell input keyevent KEYCODE_MEDIA_PAUSE; sleep 1
+# 1. A whole album, from the Download button in its header. (CI's datacenter IP is refused some
+#    tracks without an account; the failures show on the Downloads page.)
 adb shell "am start -a android.intent.action.VIEW -d 'https://music.youtube.com/browse/MPREb_K8qWMWVqXGi' -n $PKG/$ACT" >/dev/null
 sleep 16
 if tap Download; then
-  sleep 10; shot "$(printf %02d $n)-dl-started"; n=$((n+1))
+  sleep 6; shot "$(printf %02d $n)-dl-started"; n=$((n+1))
   adb shell cmd statusbar expand-notifications; sleep 3; shot "$(printf %02d $n)-dl-notification"; n=$((n+1))
   adb shell dumpsys notification --noredact > "$OUT/notification-downloads.txt"
   adb shell cmd statusbar collapse; sleep 1
-  sleep 100; shot "$(printf %02d $n)-dl-album-after"; n=$((n+1))
+  sleep 40; shot "$(printf %02d $n)-dl-album-after"; n=$((n+1))
+fi
+# 2. The song CI can play, from the player's menu.
+adb shell am start -a android.intent.action.VIEW -d "https://music.youtube.com/watch?v=$SONG" -n "$PKG/$ACT" >/dev/null
+sleep 25; adb shell input keyevent KEYCODE_MEDIA_PAUSE; sleep 2
+# The full-screen player opens on play; if it didn't, the mini player opens it.
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-player.xml" >/dev/null 2>&1
+grep -q '="Minimise player"' "$OUT/ui-player.xml" || { tap "Never Gonna Give You Up" last; sleep 3; }
+tap "Track options" last
+sleep 2; shot "$(printf %02d $n)-dl-song-menu"; n=$((n+1))
+if tap Download last; then
+  sleep 45
+  tap "Minimise player"; sleep 2
   tap More last && sleep 2 && tap Downloads && sleep 5
   shot "$(printf %02d $n)-dl-downloads"; n=$((n+1))
-  # Offline: airplane mode, then Play on the Downloads page.
-  adb shell cmd connectivity airplane-mode enable; adb shell svc wifi disable; adb shell svc data disable; sleep 6
+  # 3. Offline: airplane mode, then Play on the Downloads page.
+  adb shell cmd connectivity airplane-mode enable; adb shell svc wifi disable; adb shell svc data disable; sleep 8
   shot "$(printf %02d $n)-dl-offline"; n=$((n+1))
   if tap Play; then
     sleep 20; shot "$(printf %02d $n)-dl-offline-playing"; n=$((n+1))
-    adb shell dumpsys audio > "$OUT/audio-offline.txt"
     adb shell dumpsys media_session > "$OUT/media_session-offline.txt"
-    JUID=$(adb shell stat -c %u /data/data/$PKG 2>/dev/null | tr -d '\r')
-    summary "Offline playback, Jam audio players:"; grep -E "u/pid:${JUID:-x}/" "$OUT/audio-offline.txt" | grep -oE "state:[a-z]+" | sort | uniq -c | tee -a "$OUT/summary.txt"
     summary "Offline media session: $(awk '/app.jam.android/{f=1} f&&/state=PlaybackState/{print; exit}' "$OUT/media_session-offline.txt" | cut -c1-120)"
     adb shell input keyevent KEYCODE_MEDIA_PAUSE
   fi
-  # Offline home: the error state offers the downloads.
-  adb shell "am start -a android.intent.action.VIEW -d 'https://music.youtube.com/' -n $PKG/$ACT" >/dev/null; sleep 10
-  shot "$(printf %02d $n)-dl-offline-home"; n=$((n+1))
+  tap "Minimise player"; sleep 2
+  tap Home last; sleep 10; shot "$(printf %02d $n)-dl-offline-home"; n=$((n+1))
   adb shell cmd connectivity airplane-mode disable; adb shell svc wifi enable; adb shell svc data enable; sleep 8
 fi
 
@@ -162,7 +172,7 @@ adb shell "find /data/data/$PKG -path '*downloads*' -type f -exec ls -l {} + 2>/
 summary "Downloaded files on the device: $(grep -cE '\.(webm|m4a|audio)$' "$OUT/downloads-dir.txt"), covers: $(grep -c '\.jpg$' "$OUT/downloads-dir.txt")"
 adb logcat -d -v time > "$OUT/logcat-full.txt"
 grep -iE "AndroidRuntime|FATAL|panicked|RustStdoutStderr|Tauri|JamPlugin|JamPlayback|mpv|chromium.*CONSOLE" "$OUT/logcat-full.txt" | tail -800 > "$OUT/logcat.txt"
-summary "Engine: $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c ' downloaded') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed"
+summary "Engine: $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'downloads: downloaded video_id') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed, played from a download $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'playing the downloaded file') times"
 cat "$OUT"/limusic.log* 2>/dev/null | grep -E 'download' | tail -40 > "$OUT/downloads-log.txt"
 cat "$OUT/summary.txt"
 if grep -qE "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt"; then
