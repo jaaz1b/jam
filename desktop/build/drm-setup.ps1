@@ -61,19 +61,24 @@ if (-not $pyExe) {
   if (Test-Path -LiteralPath $guess) { $pyExe = $guess; $pyArgs = @() }
   else { Fail 'Python was installed but could not be found. Restart your PC and run this setup again from Jam.' }
 }
-function Py { & $pyExe @pyArgs @args }
-Say "Using Python: $pyExe $pyArgs" 'DarkGray'
+# Resolve the Python launcher to its full path, and give the helper a name that can't collide with
+# it: PowerShell names are case-insensitive and functions win over programs, so a helper called
+# "Py" calling "py" would call itself forever ("call depth overflow").
+$pyPath = (Get-Command $pyExe -CommandType Application -ErrorAction SilentlyContinue | Select-Object -First 1).Source
+if (-not $pyPath) { $pyPath = $pyExe }
+function Invoke-JamPython { & $pyPath @pyArgs @args }
+Say "Using Python: $pyPath $pyArgs" 'DarkGray'
 
 # ---------------------------------------------------------------- 2. castlabs-evs
 Step 2 'Installing castLabs signing tool (castlabs-evs)'
-Py -m pip install --user --upgrade --disable-pip-version-check --quiet castlabs-evs
+Invoke-JamPython -m pip install --user --upgrade --disable-pip-version-check --quiet castlabs-evs
 if ($LASTEXITCODE -ne 0) { Fail 'Could not install castlabs-evs with pip. Check your internet connection and try again.' }
 Say 'Done.' 'Green'
 
 # ---------------------------------------------------------------- 3. account
 Step 3 'Signing in to your castLabs EVS account'
 $ErrorActionPreference = 'Continue'
-Py -m castlabs_evs.account -n refresh *> $null
+Invoke-JamPython -m castlabs_evs.account -n refresh *> $null
 $haveSession = ($LASTEXITCODE -eq 0)
 $ErrorActionPreference = 'Stop'
 if ($haveSession) {
@@ -81,13 +86,13 @@ if ($haveSession) {
 } else {
   $ans = Read-Host 'Do you already have a castLabs EVS account? (y/N)'
   if ($ans -match '^(y|yes)$') {
-    Py -m castlabs_evs.account reauth
+    Invoke-JamPython -m castlabs_evs.account reauth
   } else {
     Say ''
     Say 'Creating a free account. castLabs will email you a confirmation code;' 'White'
     Say 'type it in when asked. (Organization can be anything, e.g. "Personal".)' 'White'
     Say ''
-    Py -m castlabs_evs.account signup
+    Invoke-JamPython -m castlabs_evs.account signup
   }
   if ($LASTEXITCODE -ne 0) { Fail 'Signing in to castLabs EVS did not finish. Run this setup again from Jam to retry.' }
 }
@@ -99,9 +104,9 @@ $name = [IO.Path]::GetFileNameWithoutExtension($ExePath)
 Get-Process -Name $name -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 Start-Sleep -Seconds 2
 # -H: sign Jam.exe specifically (the folder also holds "Uninstall Jam.exe").
-Py -m castlabs_evs.vmp sign-pkg -f -H $name "$AppDir"
+Invoke-JamPython -m castlabs_evs.vmp sign-pkg -f -H $name "$AppDir"
 if ($LASTEXITCODE -ne 0) { Start-Process -FilePath $ExePath; Fail 'Signing failed. Jam has been restarted; you can retry from Settings > Sources.' }
-Py -m castlabs_evs.vmp verify-pkg -H $name "$AppDir"
+Invoke-JamPython -m castlabs_evs.vmp verify-pkg -H $name "$AppDir"
 if ($LASTEXITCODE -ne 0) { Start-Process -FilePath $ExePath; Fail 'The signature could not be verified. Jam has been restarted; you can retry from Settings > Sources.' }
 
 @{ version = $Version; signedAt = (Get-Date).ToString('o') } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $AppDir 'jam-vmp.json') -Encoding ASCII
