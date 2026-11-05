@@ -117,6 +117,7 @@ class MainActivity : TauriActivity() {
     private var hook = ""
     private var keepAlive = ""
     private var desktopJs = ""
+    private var installedAppJs = ""
     private var mediaSessionJs = ""
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
@@ -193,6 +194,7 @@ class MainActivity : TauriActivity() {
         hook = assets.open("jam-hook.js").bufferedReader().readText()
         keepAlive = assets.open("keepalive.js").bufferedReader().readText()
         desktopJs = assets.open("desktop-site.js").bufferedReader().readText()
+        installedAppJs = assets.open("installed-app.js").bufferedReader().readText()
         mediaSessionJs = assets.open("mediasession.js").bufferedReader().readText()
         cleanUpProfiles()
         buildUi()
@@ -583,6 +585,12 @@ class MainActivity : TauriActivity() {
 
     // ================================================================== WebView setup
 
+    private fun online(): Boolean {
+        val cm = getSystemService(android.net.ConnectivityManager::class.java) ?: return true
+        val caps = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return caps.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
     private fun userAgent(desktop: Boolean): String {
         val def = runCatching { WebSettings.getDefaultUserAgent(this) }.getOrDefault("")
         val chrome = Regex("Chrome/(\\d+)").find(def)?.groupValues?.get(1) ?: "130"
@@ -610,7 +618,7 @@ class MainActivity : TauriActivity() {
             displayZoomControls = false
             allowFileAccess = false
             allowContentAccess = false
-            userAgentString = userAgent(src.desktopSite)
+            if (!src.offlineApp) userAgentString = userAgent(src.desktopSite)
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
@@ -626,6 +634,7 @@ class MainActivity : TauriActivity() {
         append(keepAlive).append('\n')
         append(mediaSessionJs).append('\n')
         if (src.desktopSite) append(desktopJs).append('\n')
+        if (src.offlineApp) append(installedAppJs).append('\n')
         append(hook)
         append("\n}")
     }
@@ -708,6 +717,8 @@ class MainActivity : TauriActivity() {
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {
             if (!request.isForMainFrame || response.statusCode < 500 || sourceId != active) return
+            // Offline, a web app's own offline page answers 503 (Octave's does): nothing to report.
+            if (!online()) return
             val now = System.currentTimeMillis()
             if (now - lastHttpToast < 15_000) return
             lastHttpToast = now

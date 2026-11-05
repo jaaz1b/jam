@@ -24,13 +24,19 @@ data class Source(
     val extraDomains: List<String> = emptyList(),
     /** YouTube Music: Jam's own app (the Limusic engine), not a website. */
     val engine: Boolean = false,
+    /**
+     * A web app with an offline mode once installed (Octave): Jam treats it as installed and keeps
+     * its service worker registered, and leaves the WebView's own user agent, which is the one the
+     * service worker's requests carry (Cloudflare ties its clearance to it).
+     */
+    val offlineApp: Boolean = false,
 )
 
 object Sources {
     const val YTM = "ytm"
 
     private val BUILTIN = listOf(
-        Source("octave", "Octave", "https://music.octavestreaming.com/", listOf("octavestreaming.com"), "#8b5cf6", editableLink = true),
+        Source("octave", "Octave", "https://music.octavestreaming.com/", listOf("octavestreaming.com"), "#8b5cf6", editableLink = true, offlineApp = true),
         Source(
             "monochrome", "Monochrome", "https://monochrome.st/",
             listOf("monochrome.st", "monochrome.tf", "lossless.wtf", "if-it-runs-ship-it.lol", "last.fm"), "#e8e8ee", editableLink = true,
