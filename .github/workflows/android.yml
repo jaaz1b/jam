@@ -78,6 +78,12 @@ jobs:
           mkdir -p "$JNI"
           tar -xzf libmpv-android.tgz -C "$JNI"
           rm -rf "$JNI/include"
+          # libmpv (rubberband) needs the NDK's C++ runtime next to it.
+          for pair in arm64-v8a:aarch64-linux-android x86_64:x86_64-linux-android; do
+            abi=${pair%%:*}; triple=${pair#*:}
+            [ -f "$JNI/$abi/libc++_shared.so" ] || \
+              cp "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so" "$JNI/$abi/"
+          done
           ls -la "$JNI"/*
 
       - uses: pnpm/action-setup@v4

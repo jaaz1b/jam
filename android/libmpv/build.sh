@@ -39,8 +39,11 @@ for arch in $ARCHS; do
 	}
 done
 
-# Collect the shared libraries per Android ABI, plus the NDK's libc++_shared that libmpv needs.
-ndk="$(realpath "android-ndk-$(. include/depinfo.sh; echo $v_ndk)")"
+# Collect the shared libraries per Android ABI, plus the NDK's libc++_shared that libmpv needs
+# (from the NDK that built it, wherever mpv-android's download-sdk.sh put it).
+ndk="$PWD/sdk/android-ndk-$(. include/depinfo.sh; echo $v_ndk)"
+[ -d "$ndk/toolchains" ] || { echo "NDK not found at $ndk"; ls sdk; exit 1; }
+echo "NDK: $ndk"
 pkg="$work/pkg"; rm -rf "$pkg"; mkdir -p "$pkg"
 for arch in $ARCHS; do
 	case "$arch" in
@@ -50,7 +53,7 @@ for arch in $ARCHS; do
 	mkdir -p "$pkg/$abi"
 	cp -L prefix/$arch/lib/lib{mpv,avcodec,avfilter,avformat,avutil,swresample,swscale}.so "$pkg/$abi/"
 	[ -f prefix/$arch/lib/libavdevice.so ] && cp -L prefix/$arch/lib/libavdevice.so "$pkg/$abi/"
-	cp "$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so" "$pkg/$abi/"
+	cp "$ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so" "$pkg/$abi/" || exit 1
 	echo "--- $abi"; ls -la "$pkg/$abi"
 	"$ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-readelf" -d "$pkg/$abi/libmpv.so" | grep NEEDED || true
 	strings "$pkg/$abi/libmpv.so" | grep -q 'rubberband' && echo "rubberband: yes" || echo "rubberband: NO"
