@@ -1,0 +1,44 @@
+# Dev only: fetch a site's HTML, manifest and service worker into the log, for sites the
+# development sandbox can't reach.
+name: Site probe
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: Page URL
+        default: 'https://music.octavestreaming.com/'
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Fetch
+        env:
+          URL: ${{ inputs.url }}
+        run: |
+          UA='Mozilla/5.0 (Linux; Android 14; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Mobile Safari/537.36'
+          mkdir site && cd site
+          curl -sSL -A "$UA" -D headers.txt -o index.html "$URL"
+          echo "=== headers"; cat headers.txt
+          echo "=== index.html"; head -c 6000 index.html; echo
+          echo "=== service worker / manifest mentions"
+          grep -oE '[^"'"'"' ]*(sw|service-worker|serviceworker|workbox|manifest)[^"'"'"' ]*\.(js|json|webmanifest)' index.html | sort -u | tee refs.txt
+          ORIGIN=$(python3 -c "import sys,urllib.parse as u;p=u.urlparse(sys.argv[1]);print(p.scheme+'://'+p.netloc)" "$URL")
+          for f in $(cat refs.txt) /sw.js /service-worker.js /manifest.json /manifest.webmanifest /site.webmanifest; do
+            case "$f" in http*) u="$f";; /*) u="$ORIGIN$f";; *) u="$ORIGIN/$f";; esac
+            code=$(curl -sSL -A "$UA" -o body -w '%{http_code} %{content_type}' "$u")
+            echo "=== $u -> $code"
+            case "$code" in 200*) head -c 8000 body; echo;; esac
+          done
+          echo "=== scripts referenced"
+          grep -oE 'src="[^"]+\.js"' index.html | head -20
+          for s in $(grep -oE 'src="[^"]+\.js"' index.html | sed 's/src="//;s/"$//' | head -8); do
+            case "$s" in http*) u="$s";; /*) u="$ORIGIN$s";; *) u="$ORIGIN/$s";; esac
+            curl -sSL -A "$UA" -o js "$u"
+            echo "=== $u: serviceWorker mentions"
+            grep -oE '.{0,160}serviceWorker.{0,240}' js | head -5
+            grep -oE '.{0,120}(beforeinstallprompt|display-mode: standalone|navigator.standalone|isInstalled|getInstalledRelatedApps).{0,200}' js | head -5
+            grep -oE '.{0,120}(onLine|offline).{0,160}' js | head -8
+          done
