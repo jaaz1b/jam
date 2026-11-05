@@ -40,6 +40,7 @@
 	import { subtitleCount, withSubtitleCount } from '$lib/trackcount';
 	import EditPlaylistDialog from '$lib/components/EditPlaylistDialog.svelte';
 	import TrackFilter, { filterTracks } from '$lib/components/TrackFilter.svelte';
+	import { phone } from '$lib/phone';
 	import TrackRowSkeleton from '$lib/components/TrackRowSkeleton.svelte';
 	import PlaylistSuggestions from '$lib/components/PlaylistSuggestions.svelte';
 	import ErrorState from '$lib/components/ErrorState.svelte';
@@ -1181,7 +1182,7 @@
 			{@attach sc.attach}
 			{@attach (node) => dragScroll(node, PLAYLIST_ROW_MIME)}
 		>
-			<div class="relative flex min-h-[38vh] shrink-0 items-end gap-6 overflow-hidden p-6">
+			<div class="relative flex shrink-0 overflow-hidden {phone ? 'flex-col items-center gap-4 px-4 pb-3 pt-4 text-center' : 'min-h-[38vh] items-end gap-6 p-6'}">
 				<!-- The backdrop and its fade share one layer (`art-wash` on the wrapper): see HomeHero. -->
 				<div class="art-wash pointer-events-none absolute inset-0 overflow-hidden">
 					{#if backdrop}
@@ -1202,17 +1203,17 @@
 				</div>
 				{#if isOnRepeat}
 					<div
-						class="relative flex h-40 w-40 items-center justify-center rounded-xl bg-primary/10 text-primary shadow-lg"
+						class="relative flex {phone ? 'h-[min(56vw,14rem)] w-[min(56vw,14rem)]' : 'h-40 w-40'} items-center justify-center rounded-xl bg-primary/10 text-primary shadow-lg"
 					>
 						<HugeiconsIcon icon={ListRestartIcon} class="h-20 w-20" />
 					</div>
 				{:else if art}
-					<img src={art} alt="" class="relative h-40 w-40 rounded-xl object-cover shadow-lg" />
+					<img src={art} alt="" class="relative {phone ? 'h-[min(56vw,14rem)] w-[min(56vw,14rem)]' : 'h-40 w-40'} rounded-xl object-cover shadow-lg" />
 				{:else}
-					<div class="relative h-40 w-40 rounded-xl bg-muted"></div>
+					<div class="relative {phone ? 'h-[min(56vw,14rem)] w-[min(56vw,14rem)]' : 'h-40 w-40'} rounded-xl bg-muted"></div>
 				{/if}
-				<div class="relative min-w-0 flex-1">
-					<div class="flex items-center gap-2 text-xs font-medium uppercase text-muted-foreground">
+				<div class="relative min-w-0 {phone ? 'w-full' : 'flex-1'}">
+					<div class="flex items-center {phone ? 'justify-center' : ''} gap-2 text-xs font-medium uppercase text-muted-foreground">
 						{t('common.playlist_singular')}
 						{#if isLocalList}
 							<span
@@ -1242,7 +1243,7 @@
 							</button>
 						{/if}
 					</div>
-					<h1 class="mt-1 font-heading text-4xl font-bold tracking-tight drop-shadow-lg">
+					<h1 class="mt-1 font-heading {phone ? 'text-2xl leading-tight' : 'text-4xl'} font-bold tracking-tight drop-shadow-lg">
 						{pl.title ?? t('common.playlist_singular')}
 					</h1>
 					{#if subtitle}<p class="mt-2 text-sm text-muted-foreground">{subtitle}</p>{/if}
@@ -1262,7 +1263,7 @@
 							{/if}
 						</div>
 					{/if}
-					<div class="mt-4 flex items-center justify-between gap-2">
+					<div class="mt-4 flex items-center {phone ? 'flex-wrap justify-center' : 'justify-between'} gap-2">
 						<div class="flex items-center gap-2">
 							<Button
 								class="gap-2"
@@ -1324,7 +1325,7 @@
 						</div>
 					</div>
 				</div>
-				<div class="absolute right-6 top-6">
+				<div class={phone ? 'relative w-full' : 'absolute right-6 top-6'}>
 					<TrackFilter
 						bind:value={query}
 						placeholder={t('common.search_this_playlist')}

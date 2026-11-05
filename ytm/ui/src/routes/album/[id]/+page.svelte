@@ -262,24 +262,26 @@
             ></div>
         </div>
 
+        {#if !phone}
         <div class="absolute right-6 top-6 z-10">
             <TrackFilter bind:value={query} placeholder={t("common.search_this_album")} />
         </div>
+        {/if}
 
-        <div class="relative flex flex-col gap-5 p-6 pt-10">
-            <div class="flex items-end gap-5">
+        <div class="relative flex flex-col gap-5 {phone ? 'px-4 pb-4 pt-4' : 'p-6 pt-10'}">
+            <div class="flex {phone ? 'flex-col items-center gap-4 text-center' : 'items-end gap-5'}">
                 <!-- Inline width/height so the size holds even against a stale dev-server CSS that -->
                 <!-- hasn't regenerated a newly-used spacing utility (would fall back to intrinsic size). -->
                 {#if album.thumbnail}
                     <img
                         src={thumb(album.thumbnail, 400)}
                         alt=""
-                        style="width:7rem;height:7rem"
+                        style={phone ? "width:min(62vw,15rem);height:min(62vw,15rem)" : "width:7rem;height:7rem"}
                         class="shrink-0 rounded-xl object-cover shadow-2xl"
                     />
                 {:else}
                     <div
-                        style="width:7rem;height:7rem"
+                        style={phone ? "width:min(62vw,15rem);height:min(62vw,15rem)" : "width:7rem;height:7rem"}
                         class="shrink-0 rounded-xl bg-muted"
                     ></div>
                 {/if}
@@ -290,12 +292,12 @@
                         {album.subtitle ?? "Album"}
                     </div>
                     <h1
-                        class="mt-1 font-heading text-4xl font-bold tracking-tight drop-shadow"
+                        class="mt-1 font-heading {phone ? 'text-2xl leading-tight' : 'text-4xl'} font-bold tracking-tight drop-shadow"
                     >
                         {album.title ?? "Album"}
                     </h1>
                     <div
-                        class="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground"
+                        class="mt-2 flex flex-wrap items-center {phone ? 'justify-center' : ''} gap-x-2 gap-y-1 text-sm text-muted-foreground"
                     >
                         {#if album.explicit}
                             <ExplicitIcon class="h-4 w-4 shrink-0" />
@@ -326,7 +328,7 @@
             </div>
 
             {#if album.description}
-                <div class="max-w-2xl">
+                <div class="max-w-2xl {phone ? 'text-center' : ''}">
                     <p
                         class="text-sm text-foreground/80 {expanded
                             ? ''
@@ -344,7 +346,7 @@
             {/if}
 
             <!-- Controls -->
-            <div class="relative flex items-center gap-3 {phone ? 'flex-wrap gap-y-2 [&_button]:whitespace-nowrap' : ''}">
+            <div class="relative flex items-center gap-3 {phone ? 'flex-wrap justify-center gap-y-2 [&_button]:whitespace-nowrap' : ''}">
                 <button
                     class="flex cursor-pointer items-center gap-2 rounded-full text-foreground bg-primary px-6 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
                     onclick={() => playAll(null)}
@@ -484,7 +486,10 @@
     </div>
 
     <!-- Numbered track list -->
-    <div class="content-in p-6 pt-2">
+    <div class="content-in {phone ? 'px-3 pb-6 pt-0' : 'p-6 pt-2'}">
+        {#if phone}
+            <div class="mb-2 px-1"><TrackFilter bind:value={query} placeholder={t("common.search_this_album")} /></div>
+        {/if}
         <TrackSelectionBar {selection} from={album.title} />
         {#if shown.length}
             <!-- Its width decides which columns fit (`fitColumns`). -->

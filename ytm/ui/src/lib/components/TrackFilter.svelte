@@ -25,6 +25,7 @@
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import { SearchList01Icon, Cancel01Icon } from '@hugeicons/core-free-icons';
 	import { t } from '$lib/i18n.svelte';
+	import { phone } from '$lib/phone';
 
 	let {
 		value = $bindable(''),
@@ -46,7 +47,7 @@
 		{placeholder}
 		aria-label={placeholder}
 		{onfocus}
-		class="w-48 min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+		class="{phone ? 'flex-1 py-0.5' : 'w-48'} min-w-0 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
 		onkeydown={(e) => e.key === 'Escape' && (value = '')}
 	/>
 	<!-- Holds its 1rem either way, so typing doesn't resize the box. -->
