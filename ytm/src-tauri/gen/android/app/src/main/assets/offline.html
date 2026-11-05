@@ -58,7 +58,11 @@
       else line = 'Offline copy: ' + pages + ' pages, ' + total + ' files saved' + (st.controlled ? '' : ', not in use yet') + '.';
       line += ' Checked ' + (ago < 1 ? 'just now' : ago + ' min ago') + '.';
       document.getElementById('diagSummary').textContent = line;
-      document.getElementById('diagBody').textContent = JSON.stringify(st, null, 2);
+      let log = [];
+      try { log = JSON.parse(J.offlineLogFor(src) || '[]'); } catch (e) {}
+      const t = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      document.getElementById('diagBody').textContent = JSON.stringify(st, null, 2)
+        + (log.length ? '\n\nRecent events:\n' + log.map((e) => t(e.t) + '  ' + e.ev + (e.d ? '  ' + e.d : '') + (e.p && e.p !== '/' ? '  [' + e.p + ']' : '')).join('\n') : '');
       document.getElementById('diag').hidden = false;
     }
   } catch (e) {}

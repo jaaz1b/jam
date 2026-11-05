@@ -24,6 +24,7 @@
 	import TrackMenu from './TrackMenu.svelte';
 	import ArtistLine from './ArtistLine.svelte';
 	import ExplicitIcon from './ExplicitIcon.svelte';
+	import DownloadBadge from './DownloadBadge.svelte';
 	import { currentLocale, t } from '$lib/i18n.svelte';
 	import { keyOf } from '$lib/shortcuts';
 	import type { TrackSelection } from '$lib/selection.svelte';
@@ -333,6 +334,7 @@
 				{/if}
 			</div>
 			<div class="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+				<DownloadBadge id={song.video_id} class="mr-0.5" />
 				{#if columns && song.explicit}
 					<ExplicitIcon class="mr-0.5 h-3.5 w-3.5 shrink-0" />
 				{/if}

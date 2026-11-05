@@ -26,7 +26,26 @@
 	];
 	const settings = Object.assign({ locale: 'en', theme: 'dark', accent: 'red' }, FX.settings || {});
 
+	// Downloads (downloads.rs): a few on the phone, one running, one waiting, one failed.
+	const OFFLINE = location.hash === '#offline';
+	const dl = [];
+	queueItems.slice(1, 7).forEach((s, i) => dl.push({ videoId: s.video_id, song: s, status: 'done', progress: 1, size: 3_400_000 + i * 410_000, quality: 'HIGH', addedAt: 1000 - i, doneAt: 2000 - i, cover: null }));
+	if (!OFFLINE) {
+		const more = queueItems.slice(7, 10);
+		if (more[0]) dl.push({ videoId: more[0].video_id, song: more[0], status: 'downloading', progress: 0.42, size: 0, quality: 'HIGH', addedAt: 3000 });
+		if (more[1]) dl.push({ videoId: more[1].video_id, song: more[1], status: 'queued', progress: 0, size: 0, quality: 'HIGH', addedAt: 3001 });
+		if (more[2]) dl.push({ videoId: more[2].video_id, song: more[2], status: 'failed', progress: 0, size: 0, quality: 'HIGH', addedAt: 2999, error: 'YouTube refused the download (403)' });
+	}
+	const dlChanged = () => setTimeout(() => emit('downloads-changed', null), 0);
+
 	const T = {
+		downloads_list: () => dl.slice(),
+		download_songs: (a) => { let n = 0; for (const s of a.songs) { if (dl.some((d) => d.videoId === s.video_id)) continue; dl.push({ videoId: s.video_id, song: s, status: 'queued', progress: 0, size: 0, quality: 'HIGH', addedAt: Date.now() }); n++; } dlChanged(); return n; },
+		download_remove: (a) => { for (const id of a.ids) { const i = dl.findIndex((d) => d.videoId === id); if (i >= 0) dl.splice(i, 1); } dlChanged(); return null; },
+		download_cancel_all: () => { for (let i = dl.length - 1; i >= 0; i--) if (dl[i].status !== 'done') dl.splice(i, 1); dlChanged(); return null; },
+		download_retry: () => { dl.forEach((d) => { if (d.status === 'failed') d.status = 'queued'; }); dlChanged(); return 1; },
+		download_remove_all: () => { dl.length = 0; dlChanged(); return null; },
+		download_storage: () => ({ bytes: dl.filter((d) => d.status === 'done').reduce((a, d) => a + d.size, 0) + 220_000, songs: dl.filter((d) => d.status === 'done').length, free: 41_800_000_000 }),
 		get_settings: () => settings,
 		set_setting: (a) => { settings[a.key] = a.value; return null; },
 		get_playback: () => ({ speed: 1, semitones: 0, reverb: { on: false, preset: 'room', mix: 0.3 }, now: nowPlaying, paused: false, position: 63, duration: 214, volume: 80 }),
@@ -34,7 +53,7 @@
 		get_account: () => ({ signedIn: false }),
 		get_account_identities: () => [],
 		get_google_accounts: () => [],
-		get_home: () => FX.get_home || { chips: [], sections: [] },
+		get_home: () => { if (OFFLINE) throw 'http: error sending request for url (https://music.youtube.com/youtubei/v1/browse)'; return FX.get_home || { chips: [], sections: [] }; },
 		get_home_more: () => FX.get_home_more || { chips: [], sections: [] },
 		get_moods: () => FX.get_moods || [],
 		get_mood_art: () => ({}),

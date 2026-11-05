@@ -19,6 +19,8 @@ data class NowPlaying(
     val sourceId: String,
     val sourceName: String,
     val readAt: Long = System.currentTimeMillis(),
+    /** A downloaded song's saved cover (YouTube Music): shown when [artwork] can't be fetched. */
+    val artworkFile: String? = null,
 ) {
     fun positionNow(): Double? = position?.let { if (playing) it + (System.currentTimeMillis() - readAt) / 1000.0 else it }
 }

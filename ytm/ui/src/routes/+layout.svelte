@@ -59,6 +59,8 @@
 	import MoreSheet from '$lib/components/mobile/MoreSheet.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { auth, initApp, np, playback, prefs, ui } from '$lib/player.svelte';
+	import { initDownloads } from '$lib/downloads.svelte';
+	import DownloadConfirm from '$lib/components/DownloadConfirm.svelte';
 	import { isLocalId } from '$lib/api';
 	import { video } from '$lib/video.svelte';
 	import { initWin, windowCorners } from '$lib/win.svelte';
@@ -185,12 +187,14 @@
 		// mounted for days and a mount-only check would never see a release published in between.
 		const updateTimer = setInterval(checkForUpdatesQuiet, QUIET_INTERVAL_MS);
 		const teardownApp = initApp();
+		const teardownDownloads = initDownloads();
 		const teardownZoom = initZoom();
 		const teardownShortcuts = initShortcuts();
 		initImport();
 		return () => {
 			clearInterval(updateTimer);
 			teardownApp();
+			teardownDownloads();
 			teardownWin();
 			teardownZoom();
 			teardownShortcuts();
@@ -240,6 +244,7 @@
 	{#if np.open && playback.now}<MobileNowPlaying />{/if}
 	{#if ui.theaterOpen && playback.now}<TheaterMode />{/if}
 	<MoreSheet />
+	<DownloadConfirm />
 {:else}
 	<!-- The window itself is transparent; this root paints the background and, when not maximized,
 	     rounds the corners (the compositor can't round an undecorated window for us on Linux).

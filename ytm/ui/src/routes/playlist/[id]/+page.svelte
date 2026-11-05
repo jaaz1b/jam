@@ -36,6 +36,7 @@
 	import { availableColumns, fitColumns } from '$lib/trackcolumns';
 	import TrackSelectionBar from '$lib/components/TrackSelectionBar.svelte';
 	import TrackSelectButton from '$lib/components/TrackSelectButton.svelte';
+	import DownloadButton from '$lib/components/DownloadButton.svelte';
 	import { trackSelection } from '$lib/selection.svelte';
 	import { subtitleCount, withSubtitleCount } from '$lib/trackcount';
 	import EditPlaylistDialog from '$lib/components/EditPlaylistDialog.svelte';
@@ -1273,6 +1274,14 @@
 								<HugeiconsIcon icon={PlayIcon} class="h-4 w-4" />
 								{preparing || resorting ? t('common.sorting') : t('player.play')}
 							</Button>
+							<DownloadButton
+								songs={pl.items}
+								title={pl.title ?? t('common.playlist_singular')}
+								prepare={async () => {
+									await loadAll();
+									return pl?.items ?? [];
+								}}
+							/>
 							<Button
 								variant="ghost"
 								size="icon"

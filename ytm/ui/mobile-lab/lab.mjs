@@ -60,6 +60,14 @@ const SCENES = {
 	effects: { path: '/', act: async (p) => { await clickSel('[data-player-art]')(p); await clickSel('[aria-label="Speed & pitch"]')(p); } },
 	lt: { path: '/', act: async (p) => { await clickSel('[data-mobile-nav="more"]')(p); await clickSel('[data-mobile-more="listen-together"]')(p); } },
 	account: { path: '/', act: clickSel('header [aria-haspopup], header button:last-child') },
+	downloads: { path: '/downloads' },
+	downloadsscroll: { path: '/downloads', act: async (p) => { await p.evaluate(() => document.querySelector('[data-app-main]')?.scrollBy(0, 600)); await wait(500); } },
+	dlmenu: { path: '/downloads', act: async (p) => { await wait(500); const b = await p.$$('[aria-label="Track options"]'); if (b[0]) { await b[0].click(); await wait(900); } } },
+	dlconfirm: { path: '/downloads', act: async (p) => { await wait(500); const b = await p.$$('[aria-label="Track options"]'); if (b[0]) { await b[0].click(); await wait(700); } await clickSel('[data-menu-item="download"]')(p); } },
+	offline: { path: '/#offline' },
+	offlinedl: { path: '/downloads#offline' },
+	more2: { path: '/', act: clickSel('[data-mobile-nav="more"]') },
+	settingsdl: { path: '/', act: async (p) => { await clickSel('[data-mobile-nav="more"]')(p); await clickSel('[data-mobile-more="settings"]')(p); await clickSel('[data-settings-nav] button:nth-of-type(3)')(p); await p.evaluate(() => document.querySelector('[data-settings-downloads]')?.scrollIntoView()); await wait(500); } },
 };
 
 const browser = await puppeteer.launch({

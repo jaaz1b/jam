@@ -242,8 +242,9 @@ pub async fn get_queue(state: St<'_>) -> Result<serde_json::Value, String> {
 /// `visitor_data`) and internal blobs (`queue_json`, `queue_index`, `queue_position`) never cross
 /// into the webview: they'd otherwise ship the login credential to the renderer on every open, and
 /// the webview can't overwrite them either.
-const UI_SETTINGS: [&str; 33] = [
+const UI_SETTINGS: [&str; 34] = [
     "volume",
+    "download_quality",
     "proxy",
     "quality",
     "normalize_volume",
@@ -1354,7 +1355,7 @@ fn on_repeat_songs(state: &Arc<AppState>) -> Vec<SongItem> {
 /// playlist it was played from. None of that describes the song, so On Repeat sheds it: otherwise
 /// the row wears a session member's name forever, and playing On Repeat drops it into "Next in
 /// queue" instead of the playlist. Strips on read so rows already stored this way are fixed too.
-fn shed_queue_context(s: SongItem) -> SongItem {
+pub(crate) fn shed_queue_context(s: SongItem) -> SongItem {
     SongItem {
         queued: false,
         queued_end: false,
@@ -2947,4 +2948,43 @@ mod tests {
         );
         assert_eq!(row.title, played.title, "the song itself survives");
     }
+}
+
+// --- Downloads (downloads.rs) ---------------------------------------------------------------
+
+/// Every download, newest first: finished, running, queued and failed.
+#[tauri::command]
+pub fn downloads_list(state: St<'_>) -> Vec<crate::downloads::DownloadInfo> {
+    crate::downloads::list(&state)
+}
+
+/// Queue songs for download. Answers how many were new.
+#[tauri::command]
+pub fn download_songs(state: St<'_>, songs: Vec<SongItem>) -> usize {
+    crate::downloads::enqueue(state.inner(), songs)
+}
+
+#[tauri::command]
+pub fn download_remove(state: St<'_>, ids: Vec<String>) {
+    crate::downloads::remove(&state, &ids);
+}
+
+#[tauri::command]
+pub fn download_cancel_all(state: St<'_>) {
+    crate::downloads::cancel_all(&state);
+}
+
+#[tauri::command]
+pub fn download_retry(state: St<'_>) -> usize {
+    crate::downloads::retry_failed(state.inner())
+}
+
+#[tauri::command]
+pub fn download_remove_all(state: St<'_>) {
+    crate::downloads::remove_all(&state);
+}
+
+#[tauri::command]
+pub fn download_storage() -> crate::downloads::Storage {
+    crate::downloads::storage()
 }

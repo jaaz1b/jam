@@ -3,7 +3,9 @@
 	// string and starts being something a user can act on. A dead wifi used to render as
 	// `http: error sending request for url (https://music.youtube.com/youtubei/v1/browse)` in red.
 	import { HugeiconsIcon } from '@hugeicons/svelte';
-	import { RefreshIcon, Alert02Icon, NoInternetIcon } from '@hugeicons/core-free-icons';
+	import { RefreshIcon, Alert02Icon, NoInternetIcon, Download04Icon } from '@hugeicons/core-free-icons';
+	import { goto } from '$app/navigation';
+	import { downloadCounts, downloadsEnabled } from '$lib/downloads.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import { isUnreachable } from '$lib/neterr';
 	import { whenBackOnline } from '$lib/reconnect';
@@ -49,9 +51,18 @@
 		     directly would hand the callback a MouseEvent, and any retry handler with an optional
 		     parameter (like home's `load`) would silently receive it as an argument instead of its
 		     default. -->
-		<Button variant="outline" size="sm" class="mt-3 gap-2" onclick={() => onRetry()}>
-			<HugeiconsIcon icon={RefreshIcon} class="h-4 w-4" />
-			{t('common.try_again')}
-		</Button>
+		<div class="mt-3 flex flex-wrap gap-2">
+			<!-- Jam for Android: offline, the songs on the phone are what there is to play. -->
+			{#if offline && downloadsEnabled && downloadCounts.done}
+				<Button size="sm" class="gap-2" data-offline-downloads onclick={() => goto('/downloads')}>
+					<HugeiconsIcon icon={Download04Icon} class="h-4 w-4" />
+					{t('downloads.offline_action')}
+				</Button>
+			{/if}
+			<Button variant="outline" size="sm" class="gap-2" onclick={() => onRetry()}>
+				<HugeiconsIcon icon={RefreshIcon} class="h-4 w-4" />
+				{t('common.try_again')}
+			</Button>
+		</div>
 	</div>
 </div>

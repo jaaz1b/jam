@@ -131,7 +131,7 @@ class PlaybackService : Service() {
             return
         }
         updateSession(np)
-        if (np.artwork != artUrl) loadArt(np.artwork)
+        if (artKey(np) != artUrl) loadArt(np)
         val n = build(np)
         if (np.playing || force) {
             goForeground(n)
@@ -192,7 +192,7 @@ class PlaybackService : Service() {
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, np.album)
             .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, listOf(np.artist, np.sourceName).filter { it.isNotEmpty() }.joinToString(" · "))
         np.duration?.let { if (it > 0) md.putLong(MediaMetadataCompat.METADATA_KEY_DURATION, (it * 1000).toLong()) }
-        if (np.artwork == artUrl) art?.let { md.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it) }
+        if (artKey(np) == artUrl) art?.let { md.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, it) }
         session.setMetadata(md.build())
         val actions = PlaybackStateCompat.ACTION_PLAY or PlaybackStateCompat.ACTION_PAUSE or PlaybackStateCompat.ACTION_PLAY_PAUSE or
             PlaybackStateCompat.ACTION_SKIP_TO_NEXT or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
@@ -206,18 +206,30 @@ class PlaybackService : Service() {
         )
     }
 
-    private fun loadArt(url: String?) {
-        artUrl = url
+    private fun artKey(np: NowPlaying): String? = np.artworkFile ?: np.artwork
+
+    /** The cover: a downloaded song's saved file first (no network, works offline), else the URL. */
+    private fun loadArt(np: NowPlaying) {
+        val key = artKey(np)
+        val url = np.artwork
+        val file = np.artworkFile
+        artUrl = key
         art = null
-        if (url == null) return
+        if (key == null) return
         io.execute {
-            val bmp = try {
-                http.newCall(Request.Builder().url(url).build()).execute().use { r ->
-                    if (!r.isSuccessful) null else r.body?.bytes()?.let { decode(it) }
-                }
-            } catch (e: Exception) { null }
+            var bmp: Bitmap? = null
+            if (file != null) {
+                bmp = try { java.io.File(file).takeIf { it.isFile }?.readBytes()?.let { decode(it) } } catch (e: Exception) { null }
+            }
+            if (bmp == null && url != null) {
+                bmp = try {
+                    http.newCall(Request.Builder().url(url).build()).execute().use { r ->
+                        if (!r.isSuccessful) null else r.body?.bytes()?.let { decode(it) }
+                    }
+                } catch (e: Exception) { null }
+            }
             main.post {
-                if (artUrl == url && bmp != null) {
+                if (artUrl == key && bmp != null) {
                     art = bmp
                     current?.let { show(it) }
                 }
@@ -256,7 +268,7 @@ class PlaybackService : Service() {
             )
             .addAction(R.drawable.ic_next, "Next", actionIntent("nexttrack", 3))
             .setStyle(MediaStyle().setMediaSession(session.sessionToken).setShowActionsInCompactView(0, 1, 2))
-        if (np.artwork == artUrl) art?.let { b.setLargeIcon(it) }
+        if (artKey(np) == artUrl) art?.let { b.setLargeIcon(it) }
         return b.build()
     }
 

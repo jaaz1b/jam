@@ -1357,3 +1357,39 @@ export const onMatugenThemeChanged = (cb: (css: string | null) => void): Promise
 	listen<string | null>('matugen-theme-changed', (event) => cb(event.payload));
 export const startMatugenWatcher = () => invoke<void>('start_matugen_watcher');
 export const stopMatugenWatcher = () => invoke<void>('stop_matugen_watcher');
+
+// --- Downloads (Jam for Android; src-tauri/src/downloads.rs) ------------------------------------
+
+export type DownloadStatus = 'queued' | 'downloading' | 'done' | 'failed';
+export interface DownloadInfo {
+	videoId: string;
+	song: SongItem;
+	status: DownloadStatus;
+	/** 0..1 while downloading, 1 when done. */
+	progress: number;
+	/** Bytes on disk, once done. */
+	size: number;
+	/** The download quality it was fetched at: HIGH / NORMAL / LOW. */
+	quality: string;
+	error?: string | null;
+	addedAt: number;
+	doneAt?: number | null;
+	/** The saved artwork, a path on this device. */
+	cover?: string | null;
+}
+export interface DownloadStorage {
+	bytes: number;
+	songs: number;
+	free?: number | null;
+}
+export const downloadsList = () => invoke<DownloadInfo[]>('downloads_list');
+export const downloadSongs = (songs: SongItem[]) => invoke<number>('download_songs', { songs });
+export const downloadRemove = (ids: string[]) => invoke<void>('download_remove', { ids });
+export const downloadCancelAll = () => invoke<void>('download_cancel_all');
+export const downloadRetry = () => invoke<number>('download_retry');
+export const downloadRemoveAll = () => invoke<void>('download_remove_all');
+export const downloadStorage = () => invoke<DownloadStorage>('download_storage');
+export const onDownloadsChanged = (cb: () => void): Promise<UnlistenFn> =>
+	listen('downloads-changed', () => cb());
+export const onDownloadProgress = (cb: (p: Record<string, number>) => void): Promise<UnlistenFn> =>
+	listen<Record<string, number>>('download-progress', (e) => cb(e.payload));

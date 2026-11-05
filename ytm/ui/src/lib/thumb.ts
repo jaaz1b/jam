@@ -5,8 +5,23 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 // URLs carry the size in the URL (`=w544-h544` / `=s576` suffixes). A video's i.ytimg thumb has its
 // sizes as separate files that can 404, so only the big player swaps one (see below); anything else
 // is returned unchanged.
+/**
+ * Downloaded songs' saved artwork (downloads.svelte.ts), keyed by the remote URL with its size
+ * suffix taken off. Used in place of the network copy, so a downloaded song keeps its cover offline
+ * and costs no data online.
+ */
+const offlineCovers = new Map<string, string>();
+const coverKey = (url: string) => url.replace(/=(w\d+-h\d+|s\d+)[^/]*$/, '');
+export function setOfflineCover(url: string, path: string): void {
+	if (url.startsWith('https://')) offlineCovers.set(coverKey(url), path);
+}
+
 export function thumb(url: string | undefined | null, px: number): string | undefined {
 	if (!url) return undefined;
+	if (offlineCovers.size && url.startsWith('https://')) {
+		const saved = offlineCovers.get(coverKey(url));
+		if (saved) return convertFileSrc(saved);
+	}
 	// Local library artwork is a path on this machine, not a URL. The webview can't open a bare
 	// path, so hand it through Tauri's asset protocol. Kept here rather than at the command
 	// boundary so what gets stored (queue, Shortcuts) stays the real path — which is also what

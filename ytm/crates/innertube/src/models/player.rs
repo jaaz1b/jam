@@ -226,6 +226,10 @@ pub enum AudioQuality {
     Low,
     /// Desktop has no metered-network concept → treat AUTO as "prefer HIGH" (context/12).
     Auto,
+    /// The smallest original-language audio there is (Opus ~50 kbps, itag 249, on most tracks).
+    /// Never used for streaming: it is the "Low" download quality, for fitting a lot of music on a
+    /// phone (Jam for Android).
+    Smallest,
 }
 
 /// Pick the best audio format for the requested quality. Port of `YTPlayerUtils.findFormat`,
@@ -262,6 +266,9 @@ pub fn find_format(data: &StreamingData, quality: AudioQuality) -> Option<&Forma
                 })
                 .copied()
         }
+        AudioQuality::Smallest => audio.into_iter().min_by(|a, b| {
+            a.bitrate.cmp(&b.bitrate).then(b.codec_score().cmp(&a.codec_score()))
+        }),
     }
 }
 

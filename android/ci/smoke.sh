@@ -71,6 +71,62 @@ for link in "browse/MPREb_K8qWMWVqXGi album" "channel/UClYV6hHlupm_S_ObS1W-DYw a
   adb shell input swipe 540 1600 540 700 300; sleep 2; shot "$(printf %02d $n)-ytm-$2-scrolled"; n=$((n+1))
 done
 
+# YouTube Music downloads: download an album from its page, watch the notification, then play the
+# downloads with the phone in airplane mode. Taps go through uiautomator, which sees the page's
+# buttons by their labels; playback is paused first, since a moving progress bar keeps uiautomator
+# from ever finding the screen idle.
+tap() { # tap <text or content-desc> [first|last]
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-tap.xml" >/dev/null 2>&1
+  local xy
+  xy=$(python3 - "$OUT/ui-tap.xml" "$1" "${2:-first}" <<'PY'
+import html, re, sys
+try: x = open(sys.argv[1]).read()
+except Exception: sys.exit()
+want, which, hits = sys.argv[2], sys.argv[3], []
+for m in re.finditer(r'<node [^>]*>', x):
+    n = m.group(0)
+    t = re.search(r' text="([^"]*)"', n); d = re.search(r' content-desc="([^"]*)"', n)
+    b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
+    if not b: continue
+    if want in {html.unescape(t.group(1)) if t else '', html.unescape(d.group(1)) if d else ''}:
+        a, c, e, f = map(int, b.groups())
+        if e > a and f > c: hits.append(((a + e) // 2, (c + f) // 2))
+if hits:
+    h = hits[-1] if which == 'last' else hits[0]; print(h[0], h[1])
+PY
+)
+  if [ -n "$xy" ]; then adb shell input tap $xy; return 0; fi
+  summary "tap: '$1' not found"; return 1
+}
+adb shell input keyevent KEYCODE_MEDIA_PAUSE; sleep 1
+adb shell "am start -a android.intent.action.VIEW -d 'https://music.youtube.com/browse/MPREb_K8qWMWVqXGi' -n $PKG/$ACT" >/dev/null
+sleep 16
+if tap Download; then
+  sleep 10; shot "$(printf %02d $n)-dl-started"; n=$((n+1))
+  adb shell cmd statusbar expand-notifications; sleep 3; shot "$(printf %02d $n)-dl-notification"; n=$((n+1))
+  adb shell dumpsys notification --noredact > "$OUT/notification-downloads.txt"
+  adb shell cmd statusbar collapse; sleep 1
+  sleep 100; shot "$(printf %02d $n)-dl-album-after"; n=$((n+1))
+  tap More last && sleep 2 && tap Downloads && sleep 5
+  shot "$(printf %02d $n)-dl-downloads"; n=$((n+1))
+  # Offline: airplane mode, then Play on the Downloads page.
+  adb shell cmd connectivity airplane-mode enable; adb shell svc wifi disable; adb shell svc data disable; sleep 6
+  shot "$(printf %02d $n)-dl-offline"; n=$((n+1))
+  if tap Play; then
+    sleep 20; shot "$(printf %02d $n)-dl-offline-playing"; n=$((n+1))
+    adb shell dumpsys audio > "$OUT/audio-offline.txt"
+    adb shell dumpsys media_session > "$OUT/media_session-offline.txt"
+    JUID=$(adb shell stat -c %u /data/data/$PKG 2>/dev/null | tr -d '\r')
+    summary "Offline playback, Jam audio players:"; grep -E "u/pid:${JUID:-x}/" "$OUT/audio-offline.txt" | grep -oE "state:[a-z]+" | sort | uniq -c | tee -a "$OUT/summary.txt"
+    summary "Offline media session: $(awk '/app.jam.android/{f=1} f&&/state=PlaybackState/{print; exit}' "$OUT/media_session-offline.txt" | cut -c1-120)"
+    adb shell input keyevent KEYCODE_MEDIA_PAUSE
+  fi
+  # Offline home: the error state offers the downloads.
+  adb shell "am start -a android.intent.action.VIEW -d 'https://music.youtube.com/' -n $PKG/$ACT" >/dev/null; sleep 10
+  shot "$(printf %02d $n)-dl-offline-home"; n=$((n+1))
+  adb shell cmd connectivity airplane-mode disable; adb shell svc wifi enable; adb shell svc data enable; sleep 8
+fi
+
 # Offline web app (what Octave relies on): a test site with a service worker, served from this
 # machine at http://localhost:8000 (adb reverse), opened as a Jam source marked "works offline",
 # then opened again with its server gone. It should still load, from the service worker.
@@ -102,8 +158,12 @@ timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
 for f in $(adb shell "find /data/data/$PKG /data/user/0/$PKG -name 'limusic.log*' 2>/dev/null" | tr -d '\r' | sort -u); do
   adb pull "$f" "$OUT/$(basename "$f")" >/dev/null 2>&1
 done
+adb shell "find /data/data/$PKG -path '*downloads*' -type f -exec ls -l {} + 2>/dev/null" > "$OUT/downloads-dir.txt" 2>&1
+summary "Downloaded files on the device: $(grep -cE '\.(webm|m4a|audio)$' "$OUT/downloads-dir.txt"), covers: $(grep -c '\.jpg$' "$OUT/downloads-dir.txt")"
 adb logcat -d -v time > "$OUT/logcat-full.txt"
 grep -iE "AndroidRuntime|FATAL|panicked|RustStdoutStderr|Tauri|JamPlugin|JamPlayback|mpv|chromium.*CONSOLE" "$OUT/logcat-full.txt" | tail -800 > "$OUT/logcat.txt"
+summary "Engine: $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c ' downloaded') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed"
+cat "$OUT"/limusic.log* 2>/dev/null | grep -E 'download' | tail -40 > "$OUT/downloads-log.txt"
 cat "$OUT/summary.txt"
 if grep -qE "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt"; then
   echo "Jam crashed:"; grep -B2 -A40 -E "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt" | head -100; exit 1

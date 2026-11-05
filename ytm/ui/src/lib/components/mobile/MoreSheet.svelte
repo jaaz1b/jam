@@ -11,8 +11,10 @@
 		Link01Icon,
 		FileImportIcon,
 		Settings02Icon,
-		Add01Icon
+		Add01Icon,
+		Download04Icon
 	} from '@hugeicons/core-free-icons';
+	import { downloadCounts } from '$lib/downloads.svelte';
 	import { goto } from '$app/navigation';
 	import { t } from '$lib/i18n.svelte';
 	import { ui } from '$lib/player.svelte';
@@ -22,6 +24,7 @@
 
 	const close = () => (mobile.moreOpen = false);
 	const items = [
+		{ id: 'downloads', label: () => t('downloads.title'), icon: Download04Icon, run: () => goto('/downloads') },
 		{ id: 'history', label: () => t('nav.history'), icon: Clock01Icon, run: () => goto('/history') },
 		{ id: 'stats', label: () => t('nav.stats'), icon: Chart02Icon, run: () => goto('/stats') },
 		{ id: 'new-playlist', label: () => t('nav.new_playlist'), icon: Add01Icon, run: () => (ui.newPlaylist = { songs: [] }) },
@@ -54,6 +57,9 @@
 			>
 				<HugeiconsIcon icon={item.icon} class="h-[22px] w-[22px] text-muted-foreground" />
 				<span class="flex-1">{item.label()}</span>
+				{#if item.id === 'downloads' && downloadCounts.pending}
+					<span class="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-semibold text-primary">{downloadCounts.pending}</span>
+				{/if}
 				{#if item.id === 'listen-together' && lt.role !== 'none'}
 					<span class="h-2 w-2 rounded-full bg-primary"></span>
 				{/if}

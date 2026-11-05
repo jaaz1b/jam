@@ -670,6 +670,18 @@ class MainActivity : TauriActivity() {
             }
         }
         @JavascriptInterface fun offlineStatusFor(id: String): String = Prefs.secret("offline.$id") ?: ""
+        /** What the app did with its service worker, newest last (the last 40 events), for the offline page. */
+        @JavascriptInterface fun offlineLog(json: String?) {
+            if (json == null || json.length > 1000 || !Sources.exists(sourceId) || !Sources.byId(sourceId).offlineApp) return
+            synchronized(Bridge::class.java) {
+                val arr = try { JSONArray(Prefs.secret("offlinelog.$sourceId") ?: "[]") } catch (e: Exception) { JSONArray() }
+                arr.put(try { JSONObject(json) } catch (e: Exception) { return })
+                val keep = JSONArray()
+                for (i in maxOf(0, arr.length() - 40) until arr.length()) keep.put(arr.get(i))
+                Prefs.setSecret("offlinelog.$sourceId", keep.toString())
+            }
+        }
+        @JavascriptInterface fun offlineLogFor(id: String): String = Prefs.secret("offlinelog.$id") ?: "[]"
         @JavascriptInterface fun sources(): String =
             JSONArray(Sources.all().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }).toString()
     }

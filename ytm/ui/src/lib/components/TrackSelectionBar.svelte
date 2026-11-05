@@ -9,8 +9,10 @@
 		PlayListAddIcon,
 		PlayListRemoveIcon,
 		RepeatIcon,
-		Cancel01Icon
+		Cancel01Icon,
+		Download04Icon
 	} from '@hugeicons/core-free-icons';
+	import { downloadable, downloadsEnabled, downloadSongs } from '$lib/downloads.svelte';
 	import { Button } from './ui/button';
 	import { enqueue, openAddManyToPlaylist, openPlayer, toast, ui } from '$lib/player.svelte';
 	import * as api from '$lib/api';
@@ -24,11 +26,14 @@
 	let {
 		selection,
 		from,
-		onRemove
+		onRemove,
+		downloadContext
 	}: {
 		selection: TrackSelection;
 		from?: string;
 		onRemove?: (songs: SongItem[]) => Promise<void>;
+		/** Album pages: the artwork and album their rows leave out, for downloads. */
+		downloadContext?: { thumbnail?: string | null; album?: string | null; albumId?: string | null };
 	} = $props();
 	let busy = $state(false);
 	// Second click confirms: a bulk removal is not undoable, and the button sits next to Clear.
@@ -131,6 +136,17 @@
 						title={t('player.add_to_playlist')} aria-label={t('player.add_to_playlist')}
 						onclick={() => openAddManyToPlaylist([...selection.songs])}>
 						<HugeiconsIcon icon={PlayListAddIcon} class="h-4 w-4" />
+					</Button>
+				{/if}
+				{#if downloadsEnabled && [...selection.songs].some(downloadable)}
+					<Button variant="ghost" size="icon" disabled={blocked} onkeydown={onKey}
+						data-selection-download
+						title={t('downloads.download')} aria-label={t('downloads.download')}
+						onclick={() => {
+							void downloadSongs([...selection.songs], downloadContext);
+							selection.exit();
+						}}>
+						<HugeiconsIcon icon={Download04Icon} class="h-4 w-4" />
 					</Button>
 				{/if}
 				{#if onRemove}

@@ -8,6 +8,7 @@ mod commands;
 mod db;
 mod diagnostics;
 mod discord;
+mod downloads;
 mod hotkeys;
 mod http;
 mod import;
@@ -988,6 +989,9 @@ pub fn run() {
             // Local music artwork reaches the webview over the asset protocol, whose configured
             // scope is empty — the folders it may read are the ones the user picked (local.rs).
             local::allow_music_paths(&handle, &app_state.db);
+            // Songs downloaded for offline listening: what's on disk, and whatever was still
+            // downloading when the app last stopped carries on.
+            downloads::init(&app_state);
 
             // The login entry runs whichever binary last wrote it. A dev build that wrote it leaves
             // the login launch loading the vite server, which isn't running then: tray icon, no
@@ -1218,6 +1222,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(only_ui(tauri::generate_handler![
+            commands::downloads_list,
+            commands::download_songs,
+            commands::download_remove,
+            commands::download_cancel_all,
+            commands::download_retry,
+            commands::download_remove_all,
+            commands::download_storage,
             commands::search,
             commands::search_all,
             commands::search_suggestions,

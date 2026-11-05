@@ -1,6 +1,8 @@
 <script lang="ts">
 	import { tick, untrack, type Snippet } from 'svelte';
 	import { phone } from '$lib/phone';
+	import { downloadsEnabled } from '$lib/downloads.svelte';
+	import DownloadSettings from './DownloadSettings.svelte';
 	import { save } from '@tauri-apps/plugin-dialog';
 	import { HugeiconsIcon } from '@hugeicons/svelte';
 	import {
@@ -709,6 +711,7 @@
 								})}
 							</div>
 						</section>
+						{#if downloadsEnabled}<DownloadSettings {settings} />{/if}
 						<section class={GROUP}>
 							<h3 class={LABEL}>{t('settings.sections.video')}</h3>
 							<div data-settings-card class={CARD}>

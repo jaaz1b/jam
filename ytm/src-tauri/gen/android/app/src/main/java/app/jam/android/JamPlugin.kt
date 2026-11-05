@@ -231,8 +231,25 @@ class JamPlugin(private val activity: Activity) : Plugin(activity) {
             url = o.optString("url").ifEmpty { "https://music.youtube.com/" },
             sourceId = Sources.YTM,
             sourceName = "YouTube Music",
+            artworkFile = if (o.isNull("artworkFile")) null else o.optString("artworkFile").takeIf { it.startsWith("/") },
         )
         Player.reportEngine(activity.applicationContext, np)
+    }
+
+    /** The download queue's state (downloads.rs, about once a second while it runs). */
+    @Command
+    fun downloadStatus(invoke: Invoke) {
+        val o = JSONObject(invoke.getRawArgs())
+        invoke.resolve()
+        val st = DownloadStatus(
+            pending = o.optInt("pending"),
+            running = o.optInt("running"),
+            finished = o.optInt("finished"),
+            failed = o.optInt("failed"),
+            title = if (o.isNull("title")) null else o.optString("title").takeIf { it.isNotEmpty() },
+            progress = o.optDouble("progress", 0.0).let { if (it.isNaN()) 0.0 else it },
+        )
+        main.post { DownloadService.update(activity.applicationContext, st) }
     }
 
     // ------------------------------------------------------------------ misc

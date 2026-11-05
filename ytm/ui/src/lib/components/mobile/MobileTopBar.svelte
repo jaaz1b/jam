@@ -22,7 +22,9 @@
 						? t('nav.history')
 						: path.startsWith('/stats')
 							? t('nav.stats')
-							: ''
+							: path.startsWith('/downloads')
+								? t('downloads.title')
+								: ''
 	);
 </script>
 

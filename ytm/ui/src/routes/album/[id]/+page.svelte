@@ -21,6 +21,7 @@
     import { availableColumns, fitColumns } from "$lib/trackcolumns";
     import TrackSelectionBar from "$lib/components/TrackSelectionBar.svelte";
     import TrackSelectButton from "$lib/components/TrackSelectButton.svelte";
+    import DownloadButton from "$lib/components/DownloadButton.svelte";
     import { trackSelection } from "$lib/selection.svelte";
     import TrackFilter, {
         filterTracks,
@@ -381,6 +382,13 @@
                         {inLibrary ? t("library.in_library") : t("library.save_to_library")}
                     </button>
                 {/if}
+                {#if !isLocal}
+                    <DownloadButton
+                        songs={album.items}
+                        title={album.title ?? ''}
+                        context={{ thumbnail: album.thumbnail, album: album.title, albumId: id }}
+                    />
+                {/if}
                 <TrackSelectButton
                     {selection}
                     class="flex h-10 w-10 cursor-pointer items-center justify-center rounded-full border transition hover:bg-accent/10 hover:text-foreground"
@@ -490,7 +498,7 @@
         {#if phone}
             <div class="mb-2 px-1"><TrackFilter bind:value={query} placeholder={t("common.search_this_album")} /></div>
         {/if}
-        <TrackSelectionBar {selection} from={album.title} />
+        <TrackSelectionBar {selection} from={album.title} downloadContext={{ thumbnail: album.thumbnail, album: album.title, albumId: id }} />
         {#if shown.length}
             <!-- Its width decides which columns fit (`fitColumns`). -->
             <div bind:clientWidth={listPx}>

@@ -19,8 +19,11 @@
 		SpotifyIcon,
 		SquareStackIcon,
 		UserCheck01Icon,
-		UserSharingIcon
+		UserSharingIcon,
+		Download04Icon,
+		ArrowRight01Icon
 	} from '@hugeicons/core-free-icons';
+	import { downloadCounts, downloadsEnabled } from '$lib/downloads.svelte';
 	import { Button } from '$lib/components/ui/button';
 	import * as Tabs from '$lib/components/ui/tabs';
 	import * as Tooltip from '$lib/components/ui/tooltip';
@@ -215,6 +218,38 @@
 		</div>
 	</div>
 
+
+	<!-- Jam for Android: Downloads leads the library, because it is the part that works offline. -->
+	{#if downloadsEnabled}
+		<a
+			href="/downloads"
+			data-library-downloads
+			class="mb-5 flex items-center gap-4 rounded-2xl border bg-card p-3 transition-colors hover:bg-accent/10 active:bg-muted"
+		>
+			<span
+				class="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary/80 to-primary/30 text-primary-foreground"
+			>
+				<HugeiconsIcon icon={Download04Icon} class="h-7 w-7" strokeWidth={1.8} />
+			</span>
+			<span class="min-w-0 flex-1">
+				<span class="block font-semibold">{t('downloads.library_card')}</span>
+				<span class="block truncate text-xs text-muted-foreground">
+					{#if downloadCounts.pending && downloadCounts.done}
+						{t('downloads.library_card_both', { done: downloadCounts.done, count: downloadCounts.pending })}
+					{:else if downloadCounts.pending}
+						{t('downloads.library_card_busy', { count: downloadCounts.pending })}
+					{:else if downloadCounts.done === 1}
+						{t('downloads.library_card_sub_one')}
+					{:else if downloadCounts.done}
+						{t('downloads.library_card_sub', { count: downloadCounts.done })}
+					{:else}
+						{t('downloads.library_card_empty')}
+					{/if}
+				</span>
+			</span>
+			<HugeiconsIcon icon={ArrowRight01Icon} class="h-5 w-5 shrink-0 text-muted-foreground" />
+		</a>
+	{/if}
 
 	<!-- The tabs always render: Local music needs neither an account nor a connection. -->
 	<Tabs.Root bind:value={tab}>

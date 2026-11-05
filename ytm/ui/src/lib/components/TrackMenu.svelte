@@ -25,7 +25,10 @@
 		DashboardSquare02Icon,
 		Share08Icon,
 		PreferenceVerticalIcon,
-		PencilEdit02Icon
+		PencilEdit02Icon,
+		Download04Icon,
+		Delete02Icon,
+		Cancel01Icon
 	} from '@hugeicons/core-free-icons';
 	import * as api from '$lib/api';
 	import type { SongItem } from '$lib/api';
@@ -58,6 +61,7 @@
 	import { lt } from '$lib/lt.svelte';
 	import { t } from '$lib/i18n.svelte';
 	import { invalidateCachedPrefix } from '$lib/pagecache';
+	import { askRemove, downloads, downloadSongs, downloadsEnabled, removeDownloads } from '$lib/downloads.svelte';
 
 	let {
 		song,
@@ -142,6 +146,10 @@
 	// "Remove from this playlist", for a row playing out of a playlist (issue #270). What the three
 	// conditions are and why is in `removableFromPlaylist` (queue.ts), where they are checkable.
 	const removable = $derived(removableFromPlaylist(song, playlistId, savedIn.map));
+	// Jam for Android: downloads for offline listening (downloads.svelte.ts).
+	const dl = $derived<api.DownloadStatus | 'none' | null>(
+		downloadsEnabled && !isLocal ? (downloads.byId[song.video_id]?.status ?? 'none') : null
+	);
 
 	// "Play next" on a track that is already coming up in the queue moves it into the Play next block
 	// rather than queueing a second copy. A row the user queued, the backend moves by itself
@@ -251,6 +259,32 @@
 				onclick={(e) => run(e, () => enqueue([song], false))}
 			>
 				<HugeiconsIcon icon={ArrowDownWideNarrowIcon} class="h-4 w-4" /> {t('player.add_to_queue')}
+			</button>
+		{/if}
+		{#if dl === 'none' || dl === 'failed'}
+			<button
+				data-menu-item="download"
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={(e) => run(e, () => downloadSongs([song]))}
+			>
+				<HugeiconsIcon icon={Download04Icon} class="h-4 w-4" />
+				{dl === 'failed' ? t('downloads.retry_one') : t('downloads.download')}
+			</button>
+		{:else if dl === 'queued' || dl === 'downloading'}
+			<button
+				data-menu-item="download"
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={(e) => run(e, () => removeDownloads([song.video_id]))}
+			>
+				<HugeiconsIcon icon={Cancel01Icon} class="h-4 w-4" /> {t('downloads.cancel_one')}
+			</button>
+		{:else if dl === 'done'}
+			<button
+				data-menu-item="download"
+				class="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent/10"
+				onclick={(e) => run(e, () => askRemove([song.video_id], song.title))}
+			>
+				<HugeiconsIcon icon={Delete02Icon} class="h-4 w-4" /> {t('downloads.remove_one')}
 			</button>
 		{/if}
 		<!-- Radio is the one action worth having in the player bar too (`linksOnly`): it's how you

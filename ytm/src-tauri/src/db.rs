@@ -66,6 +66,22 @@ pub struct ImportMatch {
     pub updated_at: i64,
 }
 
+/// One row of `downloads` (downloads.rs).
+pub struct DownloadRow {
+    pub video_id: String,
+    pub song_json: String,
+    pub status: String,
+    pub path: Option<String>,
+    pub cover: Option<String>,
+    pub size: i64,
+    pub itag: Option<i64>,
+    pub loudness_db: Option<f64>,
+    pub quality: String,
+    pub error: Option<String>,
+    pub added_at: i64,
+    pub done_at: Option<i64>,
+}
+
 /// A cached stream URL with its expiry. Never a source of truth — purely a latency cache.
 pub struct CachedStream {
     pub url: String,
@@ -258,6 +274,24 @@ impl Db {
             -- keyed by Spotify's track id. A cache, apart from the `manual` rows: those are the
             -- user's own picks, which every later import and "Update from Spotify" reuses.
             -- `candidates_json` is kept only for rows that still need a look.
+            -- Songs downloaded for offline listening (downloads.rs). The user's own data like
+            -- `local_playlists`: "Clear caches" leaves it alone. `song_json` is the whole
+            -- `SongItem`, so the Downloads list opens with no network at all. `status` is
+            -- queued / downloading / done / failed; only `done` rows have a `path`.
+            CREATE TABLE IF NOT EXISTS downloads (
+                video_id    TEXT PRIMARY KEY,
+                song_json   TEXT NOT NULL,
+                status      TEXT NOT NULL,
+                path        TEXT,
+                cover       TEXT,
+                size        INTEGER NOT NULL DEFAULT 0,
+                itag        INTEGER,
+                loudness_db REAL,
+                quality     TEXT NOT NULL DEFAULT '',
+                error       TEXT,
+                added_at    INTEGER NOT NULL,
+                done_at     INTEGER
+            );
             CREATE TABLE IF NOT EXISTS import_matches (
                 key             TEXT PRIMARY KEY,
                 video_id        TEXT,
@@ -681,6 +715,107 @@ impl Db {
             }
         }
         out
+    }
+
+    // --- downloads (downloads.rs) ----------------------------------------------------------
+
+    /// Every download row, newest first.
+    pub fn download_rows(&self) -> Vec<DownloadRow> {
+        let conn = self.0.lock().unwrap();
+        let Ok(mut stmt) = conn.prepare(
+            "SELECT video_id, song_json, status, path, cover, size, itag, loudness_db, quality, error, added_at, done_at
+             FROM downloads ORDER BY COALESCE(done_at, added_at) DESC, added_at DESC",
+        ) else {
+            return Vec::new();
+        };
+        let rows = stmt.query_map([], |r| {
+            Ok(DownloadRow {
+                video_id: r.get(0)?,
+                song_json: r.get(1)?,
+                status: r.get(2)?,
+                path: r.get(3)?,
+                cover: r.get(4)?,
+                size: r.get(5)?,
+                itag: r.get(6)?,
+                loudness_db: r.get(7)?,
+                quality: r.get(8)?,
+                error: r.get(9)?,
+                added_at: r.get(10)?,
+                done_at: r.get(11)?,
+            })
+        });
+        rows.map(|r| r.flatten().collect()).unwrap_or_default()
+    }
+
+    /// Queue a song (or queue it again after a failure). A row that is already done is left alone.
+    pub fn queue_download(&self, video_id: &str, song_json: &str, now: i64) -> bool {
+        let conn = self.0.lock().unwrap();
+        conn.execute(
+            "INSERT INTO downloads(video_id, song_json, status, added_at) VALUES(?1, ?2, 'queued', ?3)
+             ON CONFLICT(video_id) DO UPDATE SET song_json = excluded.song_json, status = 'queued', error = NULL
+             WHERE downloads.status = 'failed'",
+            rusqlite::params![video_id, song_json, now],
+        )
+        .map(|n| n > 0)
+        .unwrap_or(false)
+    }
+
+    pub fn set_download_song(&self, video_id: &str, song_json: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE downloads SET song_json = ?2 WHERE video_id = ?1",
+            rusqlite::params![video_id, song_json],
+        );
+    }
+
+    pub fn set_download_status(&self, video_id: &str, status: &str, error: Option<&str>) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE downloads SET status = ?2, error = ?3 WHERE video_id = ?1",
+            rusqlite::params![video_id, status, error],
+        );
+    }
+
+    /// The format a partial file holds, so a resumed download knows whether its bytes still fit.
+    pub fn set_download_itag(&self, video_id: &str, itag: i64, quality: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE downloads SET itag = ?2, quality = ?3 WHERE video_id = ?1",
+            rusqlite::params![video_id, itag, quality],
+        );
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub fn finish_download(
+        &self,
+        video_id: &str,
+        path: &str,
+        cover: Option<&str>,
+        size: i64,
+        loudness_db: Option<f64>,
+        now: i64,
+    ) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "UPDATE downloads SET status = 'done', path = ?2, cover = ?3, size = ?4, loudness_db = ?5, error = NULL, done_at = ?6 WHERE video_id = ?1",
+            rusqlite::params![video_id, path, cover, size, loudness_db, now],
+        );
+    }
+
+    pub fn delete_download(&self, video_id: &str) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute("DELETE FROM downloads WHERE video_id = ?1", [video_id]);
+    }
+
+    /// Everything not finished (Cancel all), or everything (Remove all downloads).
+    pub fn delete_downloads(&self, unfinished_only: bool) {
+        let conn = self.0.lock().unwrap();
+        let sql = if unfinished_only {
+            "DELETE FROM downloads WHERE status != 'done'"
+        } else {
+            "DELETE FROM downloads"
+        };
+        let _ = conn.execute(sql, []);
     }
 
     // --- stream url cache -------------------------------------------------------------------

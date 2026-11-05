@@ -66,6 +66,10 @@ struct NowPlaying {
     artist: String,
     album: String,
     artwork: Option<String>,
+    /// The saved cover of a downloaded song: the notification shows it when the artwork URL can't
+    /// be fetched (offline).
+    #[serde(rename = "artworkFile")]
+    artwork_file: Option<String>,
     playing: bool,
     position: f64,
     duration: Option<f64>,
@@ -121,6 +125,7 @@ fn apply(np: &mut NowPlaying, u: MediaUpdate) {
             np.position = pos.max(0.0);
         }
         MediaUpdate::VideoId(id) => {
+            np.artwork_file = crate::downloads::cover(&id);
             np.url = if crate::local::is_local_song(&id) {
                 String::new()
             } else {
@@ -175,6 +180,8 @@ fn control(app: &AppHandle, action: String, position: Option<f64>) {
             }
             "next" | "nexttrack" => state.next_in_queue().await,
             "previous" | "previoustrack" => state.prev_in_queue().await,
+            // The download notification's Cancel (downloads.rs).
+            "cancel-downloads" => crate::downloads::cancel_all(&state),
             "seekto" => {
                 if let Some(p) = position {
                     let _ = state.user_seek(p.max(0.0) * state.player.speed()).await;

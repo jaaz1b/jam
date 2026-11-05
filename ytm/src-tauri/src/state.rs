@@ -1211,6 +1211,10 @@ impl AppState {
         is_upload: bool,
         duration_secs: i64,
     ) -> Result<PlaybackData, ResolveError> {
+        // A downloaded song plays from disk, with or without a connection (downloads.rs).
+        if let Some(data) = crate::downloads::playable(video_id) {
+            return Ok(data);
+        }
         // A local file is its own "stream": no network, no cache, no extraction (local.rs).
         if let Some(path) = crate::local::song_path(video_id) {
             return crate::local::playback_data(video_id, path).map_err(|_| {
@@ -3356,7 +3360,10 @@ impl AppState {
         // Login launches can run before Wi-Fi or DNS is ready (#483); a local file needs no
         // network. The other checks come after the wait: in that minute the user can start
         // something, join a room as a guest or turn this off.
-        if !crate::local::is_local_song(&item.video_id) && !crate::http::wait_for_network().await {
+        if !crate::local::is_local_song(&item.video_id)
+            && !crate::downloads::is_downloaded(&item.video_id)
+            && !crate::http::wait_for_network().await
+        {
             return;
         }
         if !enabled() || !self.player.is_idle() || self.lt.is_guest().await {
