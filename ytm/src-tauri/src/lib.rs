@@ -1305,6 +1305,7 @@ pub fn run() {
             commands::unblock_artist,
             commands::get_local_library,
             commands::add_local_folder,
+            commands::pick_local_folder,
             commands::remove_local_folder,
             commands::allow_font_file,
             commands::get_artist,

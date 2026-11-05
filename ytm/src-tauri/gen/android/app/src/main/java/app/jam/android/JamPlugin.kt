@@ -231,6 +231,19 @@ class JamPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /** Local music: access to audio files, then Android's folder chooser; answers `{ path }`. */
+    @Command
+    fun pickMusicFolder(invoke: Invoke) {
+        main.post {
+            val act = activity as? MainActivity
+            if (act == null) { invoke.reject("Jam's window isn't open"); return@post }
+            act.pickMusicFolder { path, error ->
+                if (error != null) invoke.reject(error)
+                else invoke.resolve(JSObject().put("path", path ?: JSONObject.NULL))
+            }
+        }
+    }
+
     /** Theater mode: hide the status and navigation bars. */
     @Command
     fun setFullscreen(invoke: Invoke) {

@@ -23,6 +23,7 @@
 	import * as api from '$lib/api';
 	import { indexCards, indexSongs, match } from '$lib/localsearch';
 	import { t } from '$lib/i18n.svelte';
+	import { phone } from '$lib/phone';
 	import {
 		addLocalFolder,
 		local,
@@ -85,6 +86,16 @@
 	const SOURCE = 'Local music';
 
 	async function pickFolder() {
+		// Jam for Android: Android's own folder chooser, answered with a path the engine can scan.
+		if (phone) {
+			try {
+				const picked = await api.pickLocalFolder();
+				if (picked) await addLocalFolder(picked);
+			} catch (e) {
+				toast.error(String(e));
+			}
+			return;
+		}
 		const picked = await open({ directory: true, multiple: false, title: t('local.pick_folder_dialog') });
 		if (typeof picked === 'string') await addLocalFolder(picked);
 	}

@@ -2345,6 +2345,27 @@ pub async fn add_local_folder(
     scan_local(&state).await
 }
 
+/// Jam for Android: there is no folder dialog that hands back a path, so Jam asks for access to
+/// audio files and opens Android's folder chooser, then answers with the folder's real path (the
+/// engine scans it like any desktop folder). `None` when the user backs out.
+#[tauri::command]
+pub async fn pick_local_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    #[cfg(target_os = "android")]
+    {
+        #[derive(serde::Deserialize)]
+        struct Picked {
+            path: Option<String>,
+        }
+        let p: Picked = crate::android::call(&app, "pickMusicFolder", serde_json::json!({})).await?;
+        Ok(p.path)
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("only on Android".into())
+    }
+}
+
 /// Stop watching a folder. Its tracks disappear from the library on the rescan that follows (they
 /// come back untouched if the folder is added again — nothing on disk is modified).
 #[tauri::command]

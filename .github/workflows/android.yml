@@ -84,6 +84,8 @@ jobs:
             [ -f "$JNI/$abi/libc++_shared.so" ] || \
               cp "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/$triple/libc++_shared.so" "$JNI/$abi/"
           done
+          # mpv-android builds FFmpeg unstripped; the symbol tables are dead weight in the APK.
+          find "$JNI" -name '*.so' -exec "$ANDROID_NDK_LATEST_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip" --strip-unneeded {} +
           ls -la "$JNI"/*
 
       - uses: pnpm/action-setup@v4

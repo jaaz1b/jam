@@ -137,6 +137,52 @@ class MainActivity : TauriActivity() {
     }
     private val notifPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) {}
 
+    // ------------------------------------------------------------------ local music folder
+
+    private var folderCallback: ((String?, String?) -> Unit)? = null
+    private val audioPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) folderPicker.launch(null)
+        else finishFolder(null, "Jam needs permission to read your music to add a folder.")
+    }
+    private val folderPicker = registerForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri ->
+        if (uri == null) finishFolder(null, null)
+        else {
+            val path = treeToPath(uri)
+            if (path == null) finishFolder(null, "Pick a folder on your phone's storage or SD card.")
+            else finishFolder(path, null)
+        }
+    }
+
+    /** YouTube Music ▸ Local files: permission to read audio, then the system folder chooser. */
+    fun pickMusicFolder(cb: (path: String?, error: String?) -> Unit) {
+        folderCallback?.invoke(null, null)
+        folderCallback = cb
+        val perm = if (Build.VERSION.SDK_INT >= 33) Manifest.permission.READ_MEDIA_AUDIO else Manifest.permission.READ_EXTERNAL_STORAGE
+        if (ContextCompat.checkSelfPermission(this, perm) == PackageManager.PERMISSION_GRANTED) folderPicker.launch(null)
+        else audioPermission.launch(perm)
+    }
+
+    private fun finishFolder(path: String?, error: String?) {
+        val cb = folderCallback ?: return
+        folderCallback = null
+        cb(path, error)
+    }
+
+    /**
+     * A folder from the system chooser as a file path the engine can read (with the audio
+     * permission, Android serves media files under these paths). Internal storage and SD cards;
+     * anything else (cloud providers) has no path.
+     */
+    private fun treeToPath(uri: Uri): String? {
+        if (uri.authority != "com.android.externalstorage.documents") return null
+        val id = runCatching { android.provider.DocumentsContract.getTreeDocumentId(uri) }.getOrNull() ?: return null
+        val volume = id.substringBefore(':')
+        val rel = id.substringAfter(':', "").trim('/')
+        val root = if (volume.equals("primary", true)) android.os.Environment.getExternalStorageDirectory().absolutePath
+            else "/storage/$volume"
+        return if (rel.isEmpty()) root else "$root/$rel"
+    }
+
     private fun dp(v: Int) = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
 
     // ================================================================== lifecycle

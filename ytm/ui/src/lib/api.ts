@@ -896,6 +896,8 @@ export const getBrowseGrid = (id: string, params?: string) =>
 /** Rescan the watched folders. Cheap when nothing changed (one stat per file). */
 export const getLocalLibrary = () => invoke<LocalLibrary>('get_local_library');
 export const addLocalFolder = (path: string) => invoke<LocalLibrary>('add_local_folder', { path });
+/** Jam for Android: Android's folder chooser (after asking to read audio). `null` if cancelled. */
+export const pickLocalFolder = () => invoke<string | null>('pick_local_folder');
 export const removeLocalFolder = (path: string) =>
 	invoke<LocalLibrary>('remove_local_folder', { path });
 
