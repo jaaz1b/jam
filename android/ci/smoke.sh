@@ -172,7 +172,7 @@ adb shell "find /data/data/$PKG -path '*downloads*' -type f -exec ls -l {} + 2>/
 summary "Downloaded files on the device: $(grep -cE '\.(webm|m4a|audio)$' "$OUT/downloads-dir.txt"), covers: $(grep -c '\.jpg$' "$OUT/downloads-dir.txt")"
 adb logcat -d -v time > "$OUT/logcat-full.txt"
 grep -iE "AndroidRuntime|FATAL|panicked|RustStdoutStderr|Tauri|JamPlugin|JamPlayback|mpv|chromium.*CONSOLE" "$OUT/logcat-full.txt" | tail -800 > "$OUT/logcat.txt"
-summary "Engine: $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'downloads: downloaded video_id') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed, played from a download $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'playing the downloaded file') times"
+summary "Engine log (last two app starts only): $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'downloads: downloaded video_id') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed, played from a download $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'playing the downloaded file') times"
 cat "$OUT"/limusic.log* 2>/dev/null | grep -E 'download' | tail -40 > "$OUT/downloads-log.txt"
 cat "$OUT/summary.txt"
 if grep -qE "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt"; then

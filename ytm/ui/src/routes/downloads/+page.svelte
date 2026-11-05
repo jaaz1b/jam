@@ -58,6 +58,7 @@
 	const bytes = $derived(done.reduce((a, d) => a + (d.size || 0), 0));
 
 	let query = $state('');
+	let showAllFailed = $state(false);
 	const shown = $derived(filterTracks(songs, query));
 	const nowId = $derived(playback.now?.videoId);
 
@@ -209,13 +210,22 @@
 				</div>
 			</div>
 			<ul class="mt-2 flex flex-col">
-				{#each failed.slice(0, 20) as d (d.videoId)}
+				<!-- A few, not all: a long failed list would push the songs that do play off the screen. -->
+				{#each failed.slice(0, showAllFailed ? 200 : 3) as d (d.videoId)}
 					<li class="py-1.5 text-sm">
 						<span class="font-medium">{d.song.title}</span>
 						{#if d.error}<span class="block truncate text-xs text-muted-foreground">{d.error}</span>{/if}
 					</li>
 				{/each}
 			</ul>
+			{#if failed.length > 3 && !showAllFailed}
+				<button
+					class="mt-1 cursor-pointer text-xs font-semibold uppercase text-muted-foreground hover:text-foreground"
+					onclick={() => (showAllFailed = true)}
+				>
+					{t('common.more')} (+{failed.length - 3})
+				</button>
+			{/if}
 		</section>
 	{/if}
 

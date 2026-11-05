@@ -117,7 +117,7 @@ class DownloadService : Service() {
             val n = NotificationCompat.Builder(c, CHANNEL)
                 .setSmallIcon(android.R.drawable.stat_sys_download_done)
                 .setContentTitle(title)
-                .setContentText(if (st.failed > 0) "Open Downloads in YouTube Music to try the rest again" else "Ready to play offline")
+                .setContentText(if (st.failed > 0) "Open Downloads in YouTube Music to try again" else "Ready to play offline")
                 .setAutoCancel(true)
                 .setSilent(true)
                 .setContentIntent(openApp(c))
