@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Emulator smoke test: installs the APK, opens every built-in source and Settings, takes screenshots,
-# backgrounds the app, and fails if Jam crashed. Usage: smoke.sh <apk> <output dir>
+# checks background playback, and fails if Jam crashed.
+# Usage: smoke.sh <release apk> <output dir> [debug apk, for the background-playback test]
 set -u
-APK="$1"; OUT="$2"; PKG=app.jam.android; ACT=app.jam.MainActivity
+APK="$1"; OUT="$2"; DEBUG_APK="${3:-}"; PKG=app.jam.android; ACT=app.jam.MainActivity
 mkdir -p "$OUT"
 adb wait-for-device
 adb install -r -g "$APK" || { echo "install failed"; exit 1; }
@@ -36,13 +37,15 @@ else
   echo "Settings button not found"
 fi
 
-# Background playback: add a test source (a page that plays a quiet tone) straight into Jam's settings,
-# start playing, leave the app, turn the screen off, and check the audio keeps going.
-if [ -n "${GITHUB_SHA:-}" ]; then
-  TEST_URL="https://raw.githack.com/${GITHUB_REPOSITORY}/${GITHUB_SHA}/android/ci/test-player.html"
+# Background playback (debug build, which may load http://10.0.2.2 = this machine): add a test source
+# that plays a quiet tone straight into Jam's settings, start it, leave the app, turn the screen off,
+# then check the audio kept going.
+if [ -n "$DEBUG_APK" ]; then
+  (cd "$(dirname "$0")" && python3 -m http.server 8000 >/dev/null 2>&1 &)
+  adb install -r -g "$DEBUG_APK" || echo "debug install failed"
   adb shell am force-stop "$PKG"
   adb root >/dev/null 2>&1; sleep 3; adb wait-for-device
-  python3 - "$TEST_URL" > "$OUT/jam.xml" <<'PY'
+  python3 - "http://10.0.2.2:8000/test-player.html" > "$OUT/jam.xml" <<'PY'
 import json, sys
 from xml.sax.saxutils import escape
 s = {"customSources": [{"id": "c_smoketest", "name": "Test tone", "url": sys.argv[1], "color": "#22c55e", "desktopSite": False, "extraDomains": []}],
@@ -52,24 +55,27 @@ PY
   adb push "$OUT/jam.xml" /data/local/tmp/jam.xml >/dev/null
   adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam.xml $D/shared_prefs/jam.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam.xml; chmod 660 $D/shared_prefs/jam.xml; restorecon -R $D/shared_prefs'
   adb shell am start -W -n "$PKG/$ACT"
-  sleep 25; shot 9-test-playing
+  sleep 20; shot 9-test-playing
   adb shell input keyevent HOME; sleep 20
-  adb shell input keyevent KEYCODE_SLEEP; sleep 40
+  adb shell input keyevent KEYCODE_SLEEP; sleep 45
   adb shell dumpsys audio > "$OUT/audio.txt"
   adb shell dumpsys media_session > "$OUT/media_session.txt"
   adb shell dumpsys notification --noredact > "$OUT/notification.txt"
   adb shell pidof "$PKG" > "$OUT/pid.txt" || echo "not running" > "$OUT/pid.txt"
   adb shell input keyevent KEYCODE_WAKEUP; sleep 2
-  adb shell wm dismiss-keyguard 2>/dev/null; adb shell input keyevent 82; sleep 2
-  shot 10-notification-shade-off
-  adb shell cmd statusbar expand-notifications; sleep 3; shot 11-notifications
+  adb shell wm dismiss-keyguard 2>/dev/null; sleep 2
+  adb shell cmd statusbar expand-notifications; sleep 3; shot 10-notifications
   adb shell cmd statusbar collapse; sleep 1
-  adb shell am start -W -n "$PKG/$ACT"; sleep 4; shot 12-back-in-app
+  adb shell am start -W -n "$PKG/$ACT"; sleep 4; shot 11-back-in-app
   echo "--- background playback ---"
   echo "Jam pid: $(cat "$OUT/pid.txt")"
-  grep -iE "state:(started|paused)" "$OUT/audio.txt" | head -5
-  grep -iE "app.jam|state=PlaybackState" "$OUT/media_session.txt" | head -6
+  JUID=$(adb shell stat -c %u /data/data/$PKG | tr -d '\r')
+  echo "Jam uid: $JUID"
+  grep -E "u/pid:$JUID/" "$OUT/audio.txt" | cut -c1-200 | head -5
+  awk '/app.jam.android/{f=1} f&&/state=PlaybackState/{print; exit}' "$OUT/media_session.txt" | cut -c1-200
+  grep -c "pkg=app.jam.android" "$OUT/notification.txt" | sed 's/^/Jam notifications: /'
 fi
+
 adb shell dumpsys package "$PKG" | grep -E "versionName|versionCode" > "$OUT/version.txt"
 adb shell dumpsys webviewupdate > "$OUT/webview.txt" 2>&1
 adb logcat -d -v time > "$OUT/logcat-full.txt"
