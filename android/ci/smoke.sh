@@ -79,10 +79,10 @@ done
 tap() { # tap <text or content-desc> [first|last]
   # A dump that fails (the screen never idle) leaves the last one behind, so clear it first.
   rm -f "$OUT/ui-tap.xml"
-  for try in 1 2 3; do
+  for try in 1 2 3 4 5 6; do
     adb shell rm -f /sdcard/ui.xml; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
     adb pull /sdcard/ui.xml "$OUT/ui-tap.xml" >/dev/null 2>&1 && break
-    sleep 2
+    sleep 3
   done
   local xy
   xy=$(python3 - "$OUT/ui-tap.xml" "$1" "${2:-first}" <<'PY'
@@ -128,7 +128,7 @@ sleep 2; shot "$(printf %02d $n)-dl-song-menu"; n=$((n+1))
 if tap Download last; then
   sleep 45
   tap "Minimise player"; sleep 2
-  tap More last && sleep 2 && tap Downloads && sleep 5
+  tap More last && sleep 3 && tap Downloads && sleep 5
   shot "$(printf %02d $n)-dl-downloads"; n=$((n+1))
   # 3. Offline: airplane mode, then Play on the Downloads page.
   adb shell cmd connectivity airplane-mode enable; adb shell svc wifi disable; adb shell svc data disable; sleep 8
