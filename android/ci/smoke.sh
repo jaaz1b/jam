@@ -10,6 +10,7 @@ mkdir -p "$OUT"
 adb wait-for-device
 adb install -r -g "$APK" || { echo "install failed"; exit 1; }
 adb logcat -c
+summary "WebView: $(adb shell dumpsys webviewupdate | grep -m1 -oE 'Current WebView package[^)]*\)')"
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 summary() { echo "$*" | tee -a "$OUT/summary.txt"; }
 
