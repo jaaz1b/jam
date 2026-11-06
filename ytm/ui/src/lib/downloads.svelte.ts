@@ -1,15 +1,14 @@
-// YouTube Music downloads for offline listening (src-tauri/src/downloads.rs). Jam for Android has
-// the UI now; desktop gets it in the next desktop release (desktop/TODO.md), which is lifting
-// `downloadsEnabled` and giving the desktop menus their entries.
+// YouTube Music downloads for offline listening (src-tauri/src/downloads.rs), on Android and on
+// desktop (Jam 3.1): the same store, menus and pages; Android adds its notification, desktop its
+// taskbar progress (desktop/src/main.js).
 import * as api from './api';
 import type { DownloadInfo, SongItem } from './api';
-import { phone } from './phone';
 import { setOfflineCover } from './thumb';
 import { toast } from './player.svelte';
 import { t } from './i18n.svelte';
 
-/** Whether this build offers downloads at all. */
-export const downloadsEnabled = phone;
+/** Whether this build offers downloads at all: everywhere the engine runs (phone or desktop). */
+export const downloadsEnabled = true;
 
 /** The device's connection, as the webview sees it. Offline, only downloaded songs play. */
 export const net = $state({ online: typeof navigator === 'undefined' ? true : navigator.onLine });

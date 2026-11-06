@@ -11,6 +11,21 @@ const { HOOK, control, REDUCE_MOTION_CSS } = require('./page-scripts');
 const presence = require('./presence');
 const sources = require('./sources');
 const { Engine, locate: locateEngine } = require('./engine');
+const savedstate = require('./savedstate');
+// The preload for sites that work offline: preload.js plus installed-app.js, run in the page's own
+// world before the site's scripts (executeInMainWorld takes a function, so it is written out as one).
+let offlinePreloadPath = null;
+function offlinePreload() {
+  if (offlinePreloadPath && fs.existsSync(offlinePreloadPath)) return offlinePreloadPath;
+  const base = fs.readFileSync(path.join(__dirname, 'preload.js'), 'utf8');
+  const script = fs.readFileSync(path.join(__dirname, 'installed-app.js'), 'utf8');
+  const code = `${base}\n;if (offlineApp) {\n  try { contextBridge.executeInMainWorld({ func: function () {\n${script}\n} }); } catch (e) { console.warn('installed-app:', e); }\n}\n`;
+  const dir = path.join(app.getPath('userData'), 'generated');
+  fs.mkdirSync(dir, { recursive: true });
+  offlinePreloadPath = path.join(dir, 'preload-offline.js');
+  fs.writeFileSync(offlinePreloadPath, code);
+  return offlinePreloadPath;
+}
 const { SOURCES, byId, belongsTo, hostOf, matches } = sources;
 
 // Sign-in providers that should open as an in-app popup (sharing the source's saved login).
@@ -60,9 +75,17 @@ app.userAgentFallback = app.userAgentFallback
   .replace(/\s?Electron\/[\d.]+(\+\w+)?/i, '')
   .replace(new RegExp(`\\s?${app.getName()}\\/[\\d.]+`, 'i'), '');
 
+// A saved state asked for before Jam relaunched (savedstate.js): made now, before any session
+// opens the site's data.
+let justSaved = null;
+
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  try {
+    sources.refresh(settings.all());
+    justSaved = savedstate.applyPending(app.getPath('userData'), byId);
+  } catch (e) { console.warn('saved states:', e); }
   app.on('second-instance', () => showMain());
   app.whenReady().then(init);
 }
@@ -169,10 +192,19 @@ const site = () => { const e = active(); return e && !e.view.webContents.isDestr
 const activeSource = () => byId(activeId || settings.get('defaultSource'));
 
 const preparedSessions = new Set();
-function sessionFor(src) {
-  const ses = src.partition ? session.fromPartition(src.partition) : session.defaultSession;
+// A source opens its saved state instead of the live site (savedstate.js).
+const savedMode = (src) => !!src.offlineApp && savedstate.enabled(src.id);
+function sessionFor(src, saved = false) {
+  const ses = saved ? session.fromPartition(savedstate.savedPartition(src.id))
+    : src.partition ? session.fromPartition(src.partition) : session.defaultSession;
   if (!preparedSessions.has(ses)) {
     preparedSessions.add(ses);
+    if (saved) {
+      // The saved state never touches the network: the site's offline worker answers everything,
+      // exactly as with no internet.
+      try { ses.enableNetworkEmulation({ offline: true }); } catch {}
+      ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (_d, cb) => cb({ cancel: true }));
+    }
     // Grant what a music site needs (incl. protected playback); deny the rest.
     const ALLOWED = new Set(['media', 'mediaKeySystem', 'notifications', 'fullscreen', 'clipboard-sanitized-write', 'speaker-selection']);
     ses.setPermissionRequestHandler((_wc, perm, cb) => cb(ALLOWED.has(perm)));
@@ -191,11 +223,13 @@ function layoutViews() {
 function createView(id) {
   const src = byId(id);
   if (src.kind === 'engine') return createEngineView(src);
-  const entry = { id: src.id, src, view: null, discardTimer: null, httpError: null, waitingDrm: false, reduceMotionKey: null };
+  const saved = savedMode(src);
+  const entry = { id: src.id, src, saved, view: null, discardTimer: null, httpError: null, waitingDrm: false, reduceMotionKey: null };
+  const extra = src.offlineApp ? ['--jam-offline-app=1', ...(saved ? ['--jam-saved=1'] : [])] : [];
   entry.view = new WebContentsView({
     webPreferences: {
-      session: sessionFor(src),
-      preload: path.join(__dirname, 'preload.js'),
+      session: sessionFor(src, saved),
+      preload: src.offlineApp ? offlinePreload() : path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: true,
@@ -203,7 +237,7 @@ function createView(id) {
       // keeps playing; now-playing is event-driven so nothing depends on timers.
       backgroundThrottling: true,
       spellcheck: false,
-      additionalArguments: ['--octave-hook=' + Buffer.from(HOOK).toString('base64')],
+      additionalArguments: ['--octave-hook=' + Buffer.from(HOOK).toString('base64'), ...extra],
     },
   });
   entry.view.setBackgroundColor(BG);
@@ -251,7 +285,7 @@ function wireView(entry) {
         action: 'allow',
         overrideBrowserWindowOptions: {
           parent: mainWindow, width: 520, height: 720, autoHideMenuBar: true, icon: appIcon(), backgroundColor: BG,
-          webPreferences: { partition: src.partition || undefined, contextIsolation: true, nodeIntegration: false, sandbox: true },
+          webPreferences: { partition: (entry.saved ? savedstate.savedPartition(src.id) : src.partition) || undefined, contextIsolation: true, nodeIntegration: false, sandbox: true },
         },
       };
     }
@@ -267,6 +301,29 @@ function wireView(entry) {
 
   wc.on('did-fail-load', (_e, code, desc, url, isMainFrame) => {
     if (!isMainFrame || code === -3) return; // -3 = aborted (normal during redirects)
+    if (entry.src.offlineApp && isHttp(url)) {
+      // A site that works offline: its service worker may be answering this page from its offline
+      // copy while the request it sends alongside (navigation preload) fails and is reported as
+      // the page failing. Replacing the page now would cancel the worker's answer, so look first.
+      savedstate.appendLog(entry.id, JSON.stringify({ t: Date.now(), ev: 'page-error', d: `${desc} (${code}) ${url}`.slice(0, 300), p: 'jam' }));
+      clearTimeout(entry.errorCheck);
+      let tries = 0;
+      const check = () => {
+        if (wc.isDestroyed()) return;
+        wc.executeJavaScript(SERVED_PROBE).then((r) => {
+          if (r === 'served') {
+            savedstate.appendLog(entry.id, JSON.stringify({ t: Date.now(), ev: 'served-offline', d: url.slice(0, 300), p: 'jam' }));
+          } else if (r === 'loading' && ++tries < 5) {
+            entry.errorCheck = setTimeout(check, 1500);
+          } else {
+            savedstate.appendLog(entry.id, JSON.stringify({ t: Date.now(), ev: 'not-served', d: String(r), p: 'jam' }));
+            showOfflinePage(entry, `${desc} (${code})`);
+          }
+        }).catch(() => showOfflinePage(entry, `${desc} (${code})`));
+      };
+      entry.errorCheck = setTimeout(check, 1200);
+      return;
+    }
     showOfflinePage(entry, `${desc} (${code})`);
   });
   wc.on('render-process-gone', (_e, d) => {
@@ -279,6 +336,15 @@ function wireView(entry) {
   });
   if (isEngine) wc.on('will-navigate', (e, url) => { if (!url.startsWith('jamytm:')) { e.preventDefault(); if (isHttp(url)) shell.openExternal(url); } });
 }
+
+// Whether the page on screen is the site, answered by its service worker, rather than an error
+// page: "served", "loading" (nothing to judge yet) or "error".
+const SERVED_PROBE = `(function(){try{
+  if(!/^https?:$/.test(location.protocol))return 'error';
+  if(document.readyState==='loading')return 'loading';
+  var t=document.body?document.body.innerText:'';
+  if(navigator.serviceWorker&&navigator.serviceWorker.controller&&t.indexOf('ERR_')<0)return 'served';
+  return t?'error':'loading';}catch(e){return 'error'}})()`;
 
 function showOfflinePage(entry, err) {
   const others = SOURCES.filter((s) => s.id !== entry.id).map((s) => ({ id: s.id, name: s.name, color: s.color }));
@@ -363,7 +429,13 @@ function getEngine() {
   if (!engine) {
     engine = new Engine({ bin: engineLoc.bin, cwd: engineLoc.cwd });
     // Jam's own presence, title bar, tray and pause-on-switch follow the engine's player.
-    for (const ev of ['now-playing', 'playback-state', 'position', 'duration']) engine.subscribe(ev);
+    for (const ev of ['now-playing', 'playback-state', 'position', 'duration', 'download-progress']) engine.subscribe(ev);
+    // YouTube Music downloads (downloads.rs) show on the taskbar button while they run.
+    engine.on('event', (name, payload) => {
+      if (name !== 'download-progress' || !mainWindow || mainWindow.isDestroyed()) return;
+      const values = Object.values(payload || {}).filter((v) => typeof v === 'number');
+      mainWindow.setProgressBar(values.length ? Math.max(0.02, values.reduce((a, v) => a + v, 0) / values.length) : -1);
+    });
     engine.on('event', onEngineEvent);
     engine.on('event', (name, payload) => sendYtmEvent(name, payload)); // → the UI's own listeners
     engine.on('down', (intentional) => {
@@ -588,6 +660,10 @@ function titlebarNotice() {
   const e = active();
   const src = activeSource();
   if (!e) return null;
+  if (flash && flash.until > Date.now()) return { text: flash.text, kind: flash.kind };
+  if (e.httpError && src.offlineApp && savedstate.exists(src.id) && !e.saved) {
+    return { text: `${src.name} looks down (error ${e.httpError})`, kind: 'error', action: 'saved-on', button: 'Open saved state' };
+  }
   if (e.waitingDrm) return { text: `Getting protected playback ready for ${src.name}…`, kind: 'info' };
   if (e.starting) return { text: `Starting ${src.name}…`, kind: 'info' };
   if (e.httpError) return { text: `${src.name} looks down (error ${e.httpError})`, kind: 'error', action: 'switcher', button: 'Switch source' };
@@ -612,7 +688,9 @@ function sendTitlebarState() {
     canGoBack: !!(nh && nh.canGoBack()),
     canGoForward: !!(nh && nh.canGoForward()),
     np: np ? { title: np.title, artist: np.artist, playing: np.playing } : null,
-    source: { id: src.id, name: src.name, color: src.color },
+    source: { id: src.id, name: savedMode(src) ? `${src.name} · Saved` : src.name, color: src.color },
+    // The save button, for sites that work offline (savedstate.js).
+    saved: src.offlineApp ? { on: savedMode(src), exists: savedstate.exists(src.id) } : null,
     notice: titlebarNotice(),
   });
 }
@@ -777,6 +855,15 @@ ipcMain.on('titlebar:action', (_e, name, arg) => {
     case 'home': goHome(); break;
     case 'settings': openSettings(); return;
     case 'drm-setup': runDrmSetup(); return;
+    case 'saved-menu': {
+      const src = activeSource();
+      if (src.offlineApp) savedMenu(src, arg && Number.isFinite(arg.x) ? Math.round(arg.x) : 200);
+      return;
+    }
+    case 'saved-on': setSavedMode(activeSource().id, true); return;
+    // Automated test only (desktop/test/saved-state.mjs): the same steps without the dialogs.
+    case 'test-save': if (process.env.JAM_TEST) { savedstate.requestSave(activeSource().id); app.relaunch(); quit(); } return;
+    case 'test-saved': if (process.env.JAM_TEST) setSavedMode(activeSource().id, !!arg); return;
     case 'zoom': mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize(); return;
     case 'switcher': {
       const x = arg && Number.isFinite(arg.x) ? Math.round(arg.x) : 120;
@@ -1182,6 +1269,116 @@ ipcMain.handle('sources:remove', async (_e, id) => {
 });
 ipcMain.handle('open-external', (_e, url) => { if (isHttp(url)) shell.openExternal(url); });
 // From the offline page (it runs inside the source's view).
+// ---------------------------------------------------------------- offline copies + saved states
+
+const offlineSender = (e) => [...views.values()].find((v) => v.src.offlineApp && !v.view.webContents.isDestroyed() && v.view.webContents === e.sender);
+ipcMain.on('offline:status', (e, json) => {
+  const v = offlineSender(e);
+  if (!v || v.saved) return; // the saved state's own report would hide the live site's
+  try { savedstate.setStatus(v.id, JSON.parse(json)); } catch {}
+});
+ipcMain.on('offline:log', (e, json) => {
+  const v = offlineSender(e);
+  if (v) savedstate.appendLog(v.id, json);
+});
+ipcMain.handle('app:offline-info', (_e, id) => {
+  if (!sources.exists(String(id))) return null;
+  const src = byId(String(id));
+  if (!src.offlineApp) return null;
+  const st = savedstate.status(src.id);
+  let log = [];
+  try { log = (st.log || []).map((l) => (typeof l === 'string' ? JSON.parse(l) : l)); } catch {}
+  return { status: st.status || null, log, hasSaved: savedstate.exists(src.id), savedMode: savedMode(src) };
+});
+ipcMain.handle('app:use-saved', (_e, id, on) => setSavedMode(String(id), !!on));
+
+/** Switch a source between its live site and its saved state: a new page in the other session. */
+function setSavedMode(id, on) {
+  if (!sources.exists(id)) return;
+  const src = byId(id);
+  if (!src.offlineApp || (on && !savedstate.exists(id))) return;
+  savedstate.setEnabled(id, on);
+  const entry = views.get(id);
+  if (entry) {
+    views.delete(id);
+    clearTimeout(entry.discardTimer);
+    try { mainWindow && mainWindow.contentView.removeChildView(entry.view); } catch {}
+    if (!entry.view.webContents.isDestroyed()) entry.view.webContents.close();
+  }
+  if (activeId === id) { activeId = null; switchSource(id); }
+  else sendTitlebarState();
+  flashNotice(on ? `${src.name}: your saved state, offline` : `${src.name}: the live site`, 'info');
+}
+
+let flash = null;
+function flashNotice(text, kind = 'info', ms = 4000) {
+  flash = { text, kind, until: Date.now() + ms };
+  sendTitlebarState();
+  setTimeout(sendTitlebarState, ms + 50);
+}
+
+function formatSize(b) {
+  if (b >= 1 << 30) return (b / (1 << 30)).toFixed(1) + ' GB';
+  if (b >= 1 << 20) return Math.round(b / (1 << 20)) + ' MB';
+  return Math.round(b / 1024) + ' KB';
+}
+
+async function confirmSave(src) {
+  const again = savedstate.exists(src.id);
+  const r = await dialog.showMessageBox(mainWindow, {
+    type: 'question',
+    buttons: ['Save and restart', 'Cancel'],
+    defaultId: 0,
+    cancelId: 1,
+    title: 'Save state',
+    message: `Save ${src.name} as it is now?`,
+    detail: (again ? 'This replaces your current saved state. ' : '') +
+      `Jam keeps everything ${src.name} has on this computer as it is now: its pages, your downloaded tracks and your login, and opens ${src.name} from the save from then on, with no internet. Download the tracks you want first.\n\nJam restarts to save (a few seconds). Music stops.`,
+  });
+  if (r.response !== 0) return;
+  // The live site's page closes first so its data stops changing, and what it holds is written out.
+  const entry = views.get(src.id);
+  if (entry && !entry.view.webContents.isDestroyed()) entry.view.webContents.close();
+  const ses = sessionFor(src, false);
+  try { await ses.cookies.flushStore(); } catch {}
+  try { ses.flushStorageData(); } catch {}
+  await new Promise((res) => setTimeout(res, 1500));
+  savedstate.requestSave(src.id);
+  app.relaunch();
+  quit();
+}
+
+async function confirmDelete(src) {
+  const r = await dialog.showMessageBox(mainWindow, {
+    type: 'warning',
+    buttons: ['Delete and restart', 'Cancel'],
+    defaultId: 1,
+    cancelId: 1,
+    title: 'Delete saved state',
+    message: `Delete ${src.name}'s saved state?`,
+    detail: `${src.name} will open the live site. The live site and its downloads aren't touched. Jam restarts for a moment.`,
+  });
+  if (r.response !== 0) return;
+  savedstate.requestDelete(src.id);
+  app.relaunch();
+  quit();
+}
+
+function savedMenu(src, x) {
+  const info = savedstate.info(src.id);
+  const has = savedstate.exists(src.id);
+  const when = has ? new Date(info.savedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
+  const items = [
+    { label: 'Open my saved state (offline)', type: 'checkbox', checked: savedMode(src), enabled: has, click: (mi) => setSavedMode(src.id, mi.checked) },
+    { label: has ? `Saved ${when} · ${formatSize(info.size || 0)}` : 'No saved state yet', enabled: false },
+  ];
+  if (info && info.error) items.push({ label: `Last save failed: ${info.error}`.slice(0, 90), enabled: false });
+  items.push({ type: 'separator' },
+    { label: has ? 'Save again…' : 'Save current state…', click: () => confirmSave(src) });
+  if (has) items.push({ label: 'Delete saved state…', click: () => confirmDelete(src) });
+  Menu.buildFromTemplate(items).popup({ window: mainWindow, x, y: TITLEBAR_H - 2 });
+}
+
 ipcMain.handle('app:retry', () => { const e = active(); if (e) e.view.webContents.loadURL(e.src.url).catch(() => {}); });
 ipcMain.handle('app:switch', (_e, id) => switchSource(String(id)));
 
@@ -1200,6 +1397,12 @@ function init() {
   buildMenu();
   createMainWindow();
   updateTray();
+  if (justSaved && sources.exists(justSaved)) {
+    const info = savedstate.info(justSaved);
+    const name = byId(justSaved).name;
+    if (info && info.error) flashNotice(`Couldn't save ${name}: ${info.error}`, 'error', 9000);
+    else flashNotice(`Saved. ${name} now opens your saved state.`, 'info', 7000);
+  }
   applyRpcSettings();
 
   if (!settings.get('discordClientId') && !settings.get('firstRunDone')) {

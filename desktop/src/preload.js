@@ -17,10 +17,26 @@ if (arg && /^https?:$/.test(location.protocol)) {
   });
 }
 
+// Sites that work offline once installed (Octave): the bridge installed-app.js reports to. The
+// script itself is appended to this file for those sites (main.js `offlinePreload`), because a
+// sandboxed preload can neither load it nor evaluate it from a string.
+const offlineApp = process.argv.includes('--jam-offline-app=1') && /^https?:$/.test(location.protocol);
+if (offlineApp) {
+  const saved = process.argv.includes('--jam-saved=1');
+  contextBridge.exposeInMainWorld('JamNative', {
+    offlineStatus: (json) => { if (typeof json === 'string' && json.length < 8000) ipcRenderer.send('offline:status', json); },
+    offlineLog: (json) => { if (typeof json === 'string' && json.length < 1000) ipcRenderer.send('offline:log', json); },
+    savedMode: () => saved,
+  });
+}
+
 // Only the bundled offline page gets this bridge, never a website.
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('octave', {
     retry: () => ipcRenderer.invoke('app:retry'),
     switchTo: (id) => ipcRenderer.invoke('app:switch', id),
+    // A site's offline copy and its saved state (savedstate.js).
+    offlineInfo: (id) => ipcRenderer.invoke('app:offline-info', id),
+    useSaved: (id, on) => ipcRenderer.invoke('app:use-saved', id, on),
   });
 }

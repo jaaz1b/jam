@@ -16,6 +16,9 @@ const BUILTIN = [
     partition: null, // the default session: keeps the login from before Jam 2.0
     drm: false,
     color: '#8b5cf6',
+    // Works offline once installed: Jam treats it as an installed app and offers a saved state
+    // (savedstate.js, installed-app.js).
+    offlineApp: true,
   },
   {
     id: 'monochrome',

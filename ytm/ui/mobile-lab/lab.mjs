@@ -70,6 +70,7 @@ const SCENES = {
 	offlineplay: { path: `/playlist/${playlistId}#offline`, act: async (p) => { await wait(600); const rows = await p.$$('[data-offline-missing]'); if (rows[0]) { await rows[0].click(); await wait(400); } } },
 	offlinedl: { path: '/downloads#offline' },
 	more2: { path: '/', act: clickSel('[data-mobile-nav="more"]') },
+	desksettings: { path: '/', act: async (p) => { await p.keyboard.down('Control'); await p.keyboard.press(','); await p.keyboard.up('Control'); await wait(800); const b = await p.$$('[data-settings-nav] button'); if (b[2]) { await b[2].click(); await wait(600); } await p.evaluate(() => document.querySelector('[data-settings-downloads]')?.scrollIntoView()); await wait(400); } },
 	settingsdl: { path: '/', act: async (p) => { await clickSel('[data-mobile-nav="more"]')(p); await clickSel('[data-mobile-more="settings"]')(p); await clickSel('[data-settings-nav] button:nth-of-type(3)')(p); await p.evaluate(() => document.querySelector('[data-settings-downloads]')?.scrollIntoView()); await wait(500); } },
 };
 
@@ -85,7 +86,9 @@ for (const name of names) {
 	const sc = SCENES[name];
 	if (!sc) { console.log('unknown scene', name); continue; }
 	const page = await browser.newPage();
-	await page.setViewport({ width: 412, height: 892, deviceScaleFactor: Number(process.env.LAB_DPR || 1.5), isMobile: true, hasTouch: true });
+	if (process.env.LAB_DESKTOP) await page.setViewport({ width: 1280, height: 800, deviceScaleFactor: 1 });
+	else await page.setViewport({ width: 412, height: 892, deviceScaleFactor: Number(process.env.LAB_DPR || 1.5), isMobile: true, hasTouch: true });
+	if (process.env.LAB_DESKTOP) await page.evaluateOnNewDocument('window.__LAB_DESKTOP__ = true;');
 	await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36');
 	await page.emulateMediaFeatures([{ name: 'prefers-color-scheme', value: process.env.LAB_LIGHT ? 'light' : 'dark' }]);
 	await page.evaluateOnNewDocument(`window.__FIXTURES__=${JSON.stringify(fixtures)};`);

@@ -1,5 +1,5 @@
 <script lang="ts">
-	// Downloads (Jam for Android): what's on this phone for offline listening, and what is still on
+	// Downloads: what is on this device for offline listening, and what is still on
 	// its way. Everything here comes from SQLite and the disk (downloads.rs), so the page opens and
 	// plays with no connection at all, which is the point of it.
 	import { onMount } from 'svelte';

@@ -18,14 +18,20 @@
   .alts button { background:#1d1d25; border:1px solid #2c2c37; display:flex; align-items:center; gap:8px; padding:8px 14px; }
   .alts button:hover { border-color:#4a4a58; filter:none; }
   .alts .dot { width:8px; height:8px; border-radius:50%; }
+  #saved { margin-right:6px; }
+  button.secondary { background:#1d1d25; border:1px solid #2c2c37; }
+  .diag { margin-top:16px; text-align:left; font-size:12.5px; color:#9a9aab; }
+  .diag summary { cursor:pointer; text-align:center; list-style:none; }
+  .diag pre { white-space:pre-wrap; word-break:break-all; background:#17171d; border:1px solid #2c2c37; border-radius:10px; padding:10px; font:11px ui-monospace, monospace; color:#9a9aab; max-height:240px; overflow:auto; }
 </style>
 </head>
 <body>
   <div class="box">
     <h1 id="title">Jam can't connect</h1>
-    <p>The service may be down, or your internet connection dropped. Jam will retry automatically.</p>
-    <button id="retry">Try again</button>
+    <p id="msg">The service may be down, or your internet connection dropped. Jam will retry automatically.</p>
+    <button id="saved" hidden>Open my saved state</button><button id="retry">Try again</button>
     <div class="note" id="note"></div>
+    <details class="diag" id="diag" hidden><summary id="diagSummary"></summary><pre id="diagBody"></pre></details>
     <div class="alt" id="alt" hidden>
       <p>Or keep listening somewhere else:</p>
       <div class="alts" id="alts"></div>
@@ -51,6 +57,44 @@
       document.getElementById('alts').appendChild(b);
     }
   }
+  // Sites that work offline (Octave): their saved state, and what Jam saw of their offline copy.
+  const id = q.get('id');
+  (async () => {
+    let info = null;
+    try { info = await window.octave.offlineInfo(id); } catch {}
+    if (!info) return;
+    const saved = document.getElementById('saved');
+    if (info.savedMode) {
+      document.getElementById('title').textContent = `Your saved ${q.get('name') || 'site'} didn't open`;
+      document.getElementById('msg').textContent = 'The saved state may be incomplete. Save again from the live site, or open the live site now.';
+      saved.textContent = 'Open the live site';
+      saved.hidden = false;
+      saved.onclick = () => window.octave.useSaved(id, false);
+      document.getElementById('retry').className = 'secondary';
+    } else if (info.hasSaved) {
+      saved.hidden = false;
+      saved.onclick = () => window.octave.useSaved(id, true);
+      document.getElementById('retry').className = 'secondary';
+    }
+    const st = info.status;
+    if (st) {
+      const caches = st.caches && typeof st.caches === 'object' ? st.caches : {};
+      const pages = Object.entries(caches).filter(([n]) => /pages$/.test(n)).reduce((a, [, c]) => a + c, 0);
+      const total = Object.values(caches).reduce((a, c) => a + c, 0);
+      const ago = Math.max(0, Math.round((Date.now() - st.at) / 60000));
+      let line;
+      if (!st.sw) line = "Offline copy: this browser can't keep one.";
+      else if (!(st.registrations || []).length) line = 'Offline copy: not set up yet' + (st.error ? ' (' + st.error + ')' : '') + '.';
+      else if (!total) line = 'Offline copy: being set up, nothing saved yet.';
+      else line = 'Offline copy: ' + pages + ' pages, ' + total + ' files saved' + (st.controlled ? '' : ', not in use yet') + '.';
+      line += ' Checked ' + (ago < 1 ? 'just now' : ago + ' min ago') + '.';
+      const t = (ms) => new Date(ms).toLocaleTimeString();
+      document.getElementById('diagSummary').textContent = line;
+      document.getElementById('diagBody').textContent = JSON.stringify(st, null, 2) +
+        (info.log.length ? '\n\nRecent events:\n' + info.log.map((e) => t(e.t) + '  ' + e.ev + (e.d ? '  ' + e.d : '')).join('\n') : '');
+      document.getElementById('diag').hidden = false;
+    }
+  })();
   setInterval(() => { if (navigator.onLine) retry(); }, 30000);
 </script>
 </body>

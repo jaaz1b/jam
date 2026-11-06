@@ -18,6 +18,7 @@
   button:hover:not(:disabled) { background:var(--hover); color:var(--text); }
   button:active:not(:disabled) { background:rgba(255,255,255,.12); }
   button:disabled { opacity:.35; }
+  button#saved.on { color:var(--accent); background:rgba(167,139,250,.14); }
   button svg { width:16px; height:16px; }
   .np { flex:1; min-width:0; display:flex; justify-content:center; align-items:center; gap:7px; color:var(--muted); padding:0 12px; }
   .np span { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -51,6 +52,8 @@
     <button id="reload" title="Reload (Ctrl+R)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg></button>
     <button id="home" title="Home (Ctrl+Shift+H)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></button>
 
+    <button id="saved" title="Saved state (works offline)" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8"/><path d="M7 3v5h8"/></svg></button>
+
     <div class="notice" id="notice"><span id="noticeText"></span><button id="noticeBtn"></button></div>
     <div class="np" id="np"></div>
 
@@ -69,6 +72,9 @@
   document.getElementById('source').addEventListener('click', (e) => {
     const r = e.currentTarget.getBoundingClientRect();
     tb.action('switcher', { x: r.left });
+  });
+  document.getElementById('saved').addEventListener('click', (e) => {
+    tb.action('saved-menu', { x: e.currentTarget.getBoundingClientRect().left });
   });
   let noticeAction = null;
   document.getElementById('noticeBtn').addEventListener('click', (e) => {
@@ -105,6 +111,10 @@
       document.getElementById('srcName').textContent = s.source.name;
       document.getElementById('srcDot').style.background = s.source.color;
     }
+    const sv = document.getElementById('saved');
+    sv.hidden = !s.saved;
+    sv.classList.toggle('on', !!(s.saved && s.saved.on));
+    sv.title = s.saved && s.saved.on ? 'Saved state: on (offline)' : 'Saved state (works offline)';
     const n = document.getElementById('notice');
     n.className = 'notice' + (s.notice ? ' show ' + s.notice.kind : '');
     if (s.notice) {

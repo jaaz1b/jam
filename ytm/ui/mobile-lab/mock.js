@@ -4,8 +4,10 @@
 // that is playing so the player bar, now-playing view, queue and lyrics have something to show.
 (function () {
 	const FX = window.__FIXTURES__ || {};
-	window.__JAM_ANDROID__ = true;
-	document.addEventListener('DOMContentLoaded', () => document.documentElement.classList.add('jam-android'));
+	if (!window.__LAB_DESKTOP__) {
+		window.__JAM_ANDROID__ = true;
+		document.addEventListener('DOMContentLoaded', () => document.documentElement.classList.add('jam-android'));
+	}
 
 	const callbacks = new Map();
 	let nextId = 1;
