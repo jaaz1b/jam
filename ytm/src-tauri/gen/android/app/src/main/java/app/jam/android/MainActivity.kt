@@ -770,6 +770,9 @@ class MainActivity : TauriActivity() {
             contentDescription = "Open my saved state"
         }
         row.addView(toggle)
+        // The whole row flips the switch, not just the switch.
+        row.setOnClickListener { if (toggle.isEnabled) toggle.toggle() }
+        row.setPadding(0, dp(6), 0, dp(6))
         box.addView(row)
         val info = if (has) {
             val whenSaved = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(SavedState.savedAt(id)))

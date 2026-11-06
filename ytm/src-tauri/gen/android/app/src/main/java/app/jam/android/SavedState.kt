@@ -172,9 +172,12 @@ object SavedState {
      */
     fun saveAndRestart(activity: Activity, id: String, done: (String?) -> Unit) {
         val store = try { androidx.webkit.ProfileStore.getInstance() } catch (e: Exception) { done("This phone's WebView can't keep a saved state."); return }
-        store.getOrCreateProfile(liveProfile(id))
+        runCatching { store.getOrCreateProfile(liveProfile(id)).cookieManager.flush() }
         store.getOrCreateProfile(savedProfile(id))
         Thread({
+            // The site's page has just been closed: give WebView a moment to write what it was
+            // holding (site storage is written a second or two after each change).
+            Thread.sleep(3000)
             var ready = false
             for (i in 0 until 60) {
                 if (profileDir(activity, liveProfile(id)) != null && profileDir(activity, savedProfile(id)) != null) { ready = true; break }

@@ -77,7 +77,13 @@ done
 # buttons by their labels; playback is paused first, since a moving progress bar keeps uiautomator
 # from ever finding the screen idle.
 tap() { # tap <text or content-desc> [first|last]
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-tap.xml" >/dev/null 2>&1
+  # A dump that fails (the screen never idle) leaves the last one behind, so clear it first.
+  rm -f "$OUT/ui-tap.xml"
+  for try in 1 2 3; do
+    adb shell rm -f /sdcard/ui.xml; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+    adb pull /sdcard/ui.xml "$OUT/ui-tap.xml" >/dev/null 2>&1 && break
+    sleep 2
+  done
   local xy
   xy=$(python3 - "$OUT/ui-tap.xml" "$1" "${2:-first}" <<'PY'
 import html, re, sys
@@ -199,7 +205,7 @@ if tap "Saved state"; then
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-saved.xml" >/dev/null 2>&1
   summary "Saved state: requests to the site while it was open: $((AFTER - BEFORE)); page says: $(grep -oE 'Served with the service worker[^"]*' "$OUT/ui-saved.xml" | head -1); chip: $(grep -oE 'Offline test · Saved' "$OUT/ui-saved.xml" | head -1)"
   # Back to the live site with the switch.
-  tap "Saved state, on" && sleep 2 && tap "Open my saved state" && sleep 12
+  tap "Saved state, on" && sleep 2 && tap "Open my saved state" last && sleep 12
   shot "$(printf %02d $n)-saved-switched-live"; n=$((n+1))
   summary "Live again: requests to the site: $(( $(grep -c 'GET /offline-pwa' "$OUT/server.log") - AFTER ))"
 fi
