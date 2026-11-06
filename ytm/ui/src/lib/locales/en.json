@@ -1455,6 +1455,10 @@
 		"removed_all": "All downloads removed",
 		"quality_label_HIGH": "High",
 		"quality_label_NORMAL": "Normal",
-		"quality_label_LOW": "Low"
+		"quality_label_LOW": "Low",
+		"not_downloaded": "Not downloaded. Connect to the internet to play it.",
+		"none_downloaded": "None of these songs are downloaded.",
+		"offline_count": "Offline · {count} of {total} songs downloaded",
+		"offline_copy": "Offline · the copy from {when}"
 	}
 }

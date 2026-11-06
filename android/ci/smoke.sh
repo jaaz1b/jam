@@ -141,6 +141,9 @@ if tap Download last; then
   fi
   tap "Minimise player"; sleep 2
   tap Home last; sleep 10; shot "$(printf %02d $n)-dl-offline-home"; n=$((n+1))
+  # A playlist opened online earlier, opened again offline: its saved copy, undownloaded songs greyed.
+  adb shell "am start -a android.intent.action.VIEW -d 'https://music.youtube.com/playlist?list=RDCLAK5uy_n20FRYQXNt1p1wS55Nj2r14IouO5weaYU' -n $PKG/$ACT" >/dev/null
+  sleep 10; shot "$(printf %02d $n)-dl-offline-playlist"; n=$((n+1))
   adb shell cmd connectivity airplane-mode disable; adb shell svc wifi enable; adb shell svc data enable; sleep 8
 fi
 

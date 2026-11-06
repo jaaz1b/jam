@@ -292,6 +292,14 @@ impl Db {
                 added_at    INTEGER NOT NULL,
                 done_at     INTEGER
             );
+            -- The last copy of library pages (the playlist list, each playlist's tracks, albums),
+            -- for opening them offline (commands.rs `snapshot`). A cache: refreshed on every
+            -- successful load, and "Clear caches" leaves it, since offline it is all there is.
+            CREATE TABLE IF NOT EXISTS page_snapshots (
+                key        TEXT PRIMARY KEY,
+                json       TEXT NOT NULL,
+                saved_at   INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS import_matches (
                 key             TEXT PRIMARY KEY,
                 video_id        TEXT,
@@ -715,6 +723,26 @@ impl Db {
             }
         }
         out
+    }
+
+    // --- page snapshots (commands.rs `snapshot`) ------------------------------------------------
+
+    pub fn put_snapshot(&self, key: &str, json: &str, now: i64) {
+        let conn = self.0.lock().unwrap();
+        let _ = conn.execute(
+            "INSERT INTO page_snapshots(key, json, saved_at) VALUES(?1, ?2, ?3)
+             ON CONFLICT(key) DO UPDATE SET json = excluded.json, saved_at = excluded.saved_at",
+            rusqlite::params![key, json, now],
+        );
+    }
+
+    /// The snapshot and when it was saved.
+    pub fn get_snapshot(&self, key: &str) -> Option<(String, i64)> {
+        let conn = self.0.lock().unwrap();
+        conn.query_row("SELECT json, saved_at FROM page_snapshots WHERE key = ?1", [key], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .ok()
     }
 
     // --- downloads (downloads.rs) ----------------------------------------------------------

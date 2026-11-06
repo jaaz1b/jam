@@ -1149,9 +1149,19 @@ pub async fn comment_delete(state: St<'_>, comment_id: String) -> Result<(), Com
     Ok(())
 }
 
+/// Every playlist in the library. Offline (or when YouTube fails), the last list that loaded, so
+/// the downloaded songs in them stay playable (`snapshot`).
 #[tauri::command]
-pub async fn get_library(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
-    let client = metadata_client(&state)?;
+pub async fn get_library(state: St<'_>) -> Result<serde_json::Value, String> {
+    let live = get_library_live(&state).await;
+    if let Ok(items) = &live {
+        crate::commands::sync_offline_pages(state.inner().clone(), items.clone());
+    }
+    snapshot(&state, "library", live)
+}
+
+async fn get_library_live(state: &Arc<AppState>) -> Result<Vec<BrowseItem>, String> {
+    let client = metadata_client(state)?;
     // Signed out there is no YouTube library to ask for (the browse would come back as a sign-in
     // shell), but On Repeat is built from this machine's play history and is still real.
     let mut items = if state.it.is_logged_in() {
@@ -1198,12 +1208,16 @@ pub async fn get_library(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
 /// Empty rather than an error when signed out: the Library page merges the user's local saves into
 /// these grids, so "nothing of yours on YouTube" is an answer, not a failure.
 #[tauri::command]
-pub async fn get_library_albums(state: St<'_>) -> Result<Vec<BrowseItem>, String> {
+pub async fn get_library_albums(state: St<'_>) -> Result<serde_json::Value, String> {
     if !state.it.is_logged_in() {
-        return Ok(Vec::new());
+        return Ok(serde_json::json!([]));
     }
     let client = metadata_client(&state)?;
-    state.it.library_albums(client).await.map_err(|e| e.to_string())
+    let live = state.it.library_albums(client).await.map_err(|e| e.to_string());
+    if let Ok(items) = &live {
+        crate::commands::sync_offline_pages(state.inner().clone(), items.clone());
+    }
+    snapshot(&state, "library_albums", live)
 }
 
 /// The user's own uploaded albums (Library ▸ Uploads ▸ Albums).
@@ -1256,9 +1270,35 @@ pub async fn get_playlist(
     id: String,
     sort: Option<PlaylistSort>,
     desc: Option<bool>,
+) -> Result<serde_json::Value, String> {
+    if id == ON_REPEAT_ID || is_local_playlist(&id) {
+        return get_playlist_live(&state, &id, None).await.and_then(|p| serde_json::to_value(p).map_err(|e| e.to_string()));
+    }
+    let sorted = sort.is_some();
+    let live = get_playlist_live(&state, &id, sort.map(|s| (s, desc.unwrap_or(false)))).await;
+    let key = format!("playlist:{id}");
+    match live {
+        // Only YouTube's own order is kept: that is the one an offline visit gets.
+        Ok(page) if !sorted => {
+            if let Some(token) = &page.continuation {
+                note_continuation(token, &key);
+            }
+            snapshot(&state, &key, Ok(page))
+        }
+        Ok(page) => serde_json::to_value(page).map_err(|e| e.to_string()),
+        Err(e) => snapshot::<PlaylistPage>(&state, &key, Err(e)),
+    }
+}
+
+async fn get_playlist_live(
+    state: &Arc<AppState>,
+    id: &str,
+    sort: Option<(PlaylistSort, bool)>,
 ) -> Result<PlaylistPage, String> {
+    let id = id.to_owned();
+    let state = state;
     if id == ON_REPEAT_ID {
-        let items = on_repeat_songs(&state);
+        let items = on_repeat_songs(state);
         return Ok(PlaylistPage {
             title: Some("On Repeat".into()),
             subtitle: Some(format!("{} songs you've played most this month", items.len())),
@@ -1275,13 +1315,12 @@ pub async fn get_playlist(
         });
     }
     if is_local_playlist(&id) {
-        return local_playlist_page(&state, &id);
+        return local_playlist_page(state, &id);
     }
-    let client = metadata_client(&state)?;
-    let sort = sort.map(|s| (s, desc.unwrap_or(false)));
+    let client = metadata_client(state)?;
     let mut page = state.it.playlist(client, &id, sort).await.map_err(|e| e.to_string())?;
     // Alongside YouTube's own thumbnail, not over it: the dialog offers to drop the custom one.
-    page.cover = custom_cover(&state, &id);
+    page.cover = custom_cover(state, &id);
     Ok(page)
 }
 
@@ -1386,11 +1425,13 @@ pub async fn get_playlist_more(
     total: Option<usize>,
 ) -> Result<PlaylistContinuation, String> {
     let client = metadata_client(&state)?;
-    match total {
+    let more = match total {
         Some(total) => state.it.playlist_pages(client, &token, total).await,
         None => state.it.playlist_continuation(client, &token).await,
     }
-    .map_err(|e| e.to_string())
+    .map_err(|e| e.to_string())?;
+    extend_snapshot(&state, &token, &more);
+    Ok(more)
 }
 
 /// A batch of suggestions for a playlist you own (#395). `token` is the page's `suggestions`, the
@@ -1411,7 +1452,16 @@ pub async fn get_playlist_suggestions(
 
 /// An album page. `id` is the album browseId (`MPRE…`).
 #[tauri::command]
-pub async fn get_album(state: St<'_>, id: String) -> Result<AlbumPage, String> {
+pub async fn get_album(state: St<'_>, id: String) -> Result<serde_json::Value, String> {
+    let local = id.starts_with(crate::local::ALBUM_PREFIX) || id.starts_with(crate::local::ARTIST_PREFIX);
+    let live = get_album_live(&state, &id).await;
+    if local {
+        return live.and_then(|p| serde_json::to_value(p).map_err(|e| e.to_string()));
+    }
+    snapshot(&state, &format!("album:{id}"), live)
+}
+
+async fn get_album_live(state: &Arc<AppState>, id: &str) -> Result<AlbumPage, String> {
     // A local album is built from SQLite, so it opens the same page while offline (local.rs).
     if let Some(key) = id.strip_prefix(crate::local::ALBUM_PREFIX) {
         return Ok(crate::local::album_page(&state.db, key));
@@ -1421,8 +1471,8 @@ pub async fn get_album(state: St<'_>, id: String) -> Result<AlbumPage, String> {
     if let Some(name) = id.strip_prefix(crate::local::ARTIST_PREFIX) {
         return Ok(crate::local::artist_page(&state.db, name));
     }
-    let client = metadata_client(&state)?;
-    let mut page = state.it.album(client, &id).await.map_err(|e| e.to_string())?;
+    let client = metadata_client(state)?;
+    let mut page = state.it.album(client, id).await.map_err(|e| e.to_string())?;
     // `album()` hands back the album audio for rows YouTube linked to a music video. With music
     // videos on, those rows play the video, as on YouTube Music, with the song a switch away (#442),
     // unless `videos_first` is off: some videos carry intros and extra scenes the song doesn't (#464).
@@ -2987,4 +3037,139 @@ pub fn download_remove_all(state: St<'_>) {
 #[tauri::command]
 pub fn download_storage() -> crate::downloads::Storage {
     crate::downloads::storage()
+}
+
+// --- Offline pages ---------------------------------------------------------------------------
+
+/// Keep what loaded, or hand back the last copy when it didn't (offline, or YouTube failing). The
+/// copy comes marked `offline: true` and without a paging token or suggestions, since neither can
+/// be followed without YouTube.
+fn snapshot<T: serde::Serialize>(
+    state: &Arc<AppState>,
+    key: &str,
+    live: Result<T, String>,
+) -> Result<serde_json::Value, String> {
+    match live {
+        Ok(v) => {
+            let json = serde_json::to_value(&v).map_err(|e| e.to_string())?;
+            if let Ok(text) = serde_json::to_string(&json) {
+                state.db.put_snapshot(key, &text, now_secs());
+            }
+            Ok(json)
+        }
+        Err(e) => {
+            let Some((text, saved_at)) = state.db.get_snapshot(key) else { return Err(e) };
+            let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&text) else { return Err(e) };
+            tracing::info!(key, error = %e, "offline: the saved copy");
+            if let Some(o) = json.as_object_mut() {
+                o.insert("continuation".into(), serde_json::Value::Null);
+                o.insert("suggestions".into(), serde_json::Value::Null);
+                o.insert("offline".into(), true.into());
+                o.insert("savedAt".into(), saved_at.into());
+            }
+            Ok(json)
+        }
+    }
+}
+
+/// Paging token → the snapshot its pages belong to, so pages scrolled in while online join it.
+fn continuations() -> &'static std::sync::Mutex<std::collections::HashMap<String, String>> {
+    static MAP: std::sync::OnceLock<std::sync::Mutex<std::collections::HashMap<String, String>>> = std::sync::OnceLock::new();
+    MAP.get_or_init(Default::default)
+}
+
+fn note_continuation(token: &str, key: &str) {
+    if let Ok(mut m) = continuations().lock() {
+        if m.len() > 64 {
+            m.clear();
+        }
+        m.insert(token.to_owned(), key.to_owned());
+    }
+}
+
+fn extend_snapshot(state: &Arc<AppState>, token: &str, more: &innertube::PlaylistContinuation) {
+    let Some(key) = continuations().lock().ok().and_then(|mut m| m.remove(token)) else { return };
+    let Some((text, _)) = state.db.get_snapshot(&key) else { return };
+    let Ok(mut json) = serde_json::from_str::<serde_json::Value>(&text) else { return };
+    // Only onto the copy this token came from: a refresh since then started a new one.
+    if json.get("continuation").and_then(|c| c.as_str()) != Some(token) {
+        return;
+    }
+    let Ok(extra) = serde_json::to_value(&more.items) else { return };
+    if let (Some(items), Some(extra)) = (json.get_mut("items").and_then(|i| i.as_array_mut()), extra.as_array()) {
+        items.extend(extra.iter().cloned());
+    }
+    json["continuation"] = more.continuation.clone().map(Into::into).unwrap_or(serde_json::Value::Null);
+    if let Some(next) = &more.continuation {
+        note_continuation(next, &key);
+    }
+    if let Ok(text) = serde_json::to_string(&json) {
+        state.db.put_snapshot(&key, &text, now_secs());
+    }
+}
+
+/// After the library loads: keep a whole copy of every playlist and album in it, refreshed at most
+/// twice a day, so each can be opened offline (with its downloaded songs playable) even if it was
+/// never opened. One page at a time with a pause between, in the background.
+pub(crate) fn sync_offline_pages(state: Arc<AppState>, items: Vec<BrowseItem>) {
+    static RUNNING: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if RUNNING.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    tauri::async_runtime::spawn(async move {
+        const FRESH: i64 = 12 * 60 * 60;
+        let mut fetched = 0;
+        for item in items.iter().take(150) {
+            let key = match item.kind {
+                "playlist" if item.id != ON_REPEAT_ID && !is_local_playlist(&item.id) && !crate::local::is_local_song(&item.id) => {
+                    format!("playlist:{}", item.id)
+                }
+                "album" if !item.id.starts_with(crate::local::ALBUM_PREFIX) => format!("album:{}", item.id),
+                _ => continue,
+            };
+            if state.db.get_snapshot(&key).is_some_and(|(_, at)| now_secs() - at < FRESH) {
+                continue;
+            }
+            let ok = if item.kind == "album" {
+                match get_album_live(&state, &item.id).await {
+                    Ok(p) => snapshot(&state, &key, Ok(p)).is_ok(),
+                    Err(_) => false,
+                }
+            } else {
+                match whole_playlist(&state, &item.id).await {
+                    Ok(p) => snapshot(&state, &key, Ok(p)).is_ok(),
+                    Err(_) => false,
+                }
+            };
+            if !ok {
+                // Offline or refused: the rest would go the same way.
+                break;
+            }
+            fetched += 1;
+            tokio::time::sleep(std::time::Duration::from_millis(1200)).await;
+        }
+        if fetched > 0 {
+            tracing::info!(fetched, "offline copies of library pages refreshed");
+        }
+        RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
+    });
+}
+
+/// A playlist with every page in (up to 5000 tracks), for its offline copy.
+async fn whole_playlist(state: &Arc<AppState>, id: &str) -> Result<PlaylistPage, String> {
+    let mut page = get_playlist_live(state, id, None).await?;
+    let client = metadata_client(state)?;
+    let mut pages = 0;
+    while let Some(token) = page.continuation.clone() {
+        if pages >= 50 || page.items.len() >= 5000 {
+            break;
+        }
+        let more = state.it.playlist_continuation(client, &token).await.map_err(|e| e.to_string())?;
+        page.items.extend(more.items);
+        page.continuation = more.continuation;
+        pages += 1;
+        tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    }
+    page.continuation = None;
+    Ok(page)
 }

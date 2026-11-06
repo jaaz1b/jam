@@ -36,6 +36,12 @@
 		if (more[1]) dl.push({ videoId: more[1].video_id, song: more[1], status: 'queued', progress: 0, size: 0, quality: 'HIGH', addedAt: 3001 });
 		if (more[2]) dl.push({ videoId: more[2].video_id, song: more[2], status: 'failed', progress: 0, size: 0, quality: 'HIGH', addedAt: 2999, error: 'YouTube refused the download (403)' });
 	}
+	if (OFFLINE) {
+		try { Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: () => false }); } catch (e) {}
+		const plItems = (FX.get_playlist && FX.get_playlist.items) || [];
+		const alItems = (FX.get_album && FX.get_album.items) || [];
+		[plItems[0], plItems[2], plItems[3], alItems[1], alItems[4]].filter(Boolean).forEach((s, i) => dl.push({ videoId: s.video_id, song: s, status: 'done', progress: 1, size: 3_000_000, quality: 'HIGH', addedAt: 50 + i, doneAt: 60 + i }));
+	}
 	const dlChanged = () => setTimeout(() => emit('downloads-changed', null), 0);
 
 	const T = {

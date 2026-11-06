@@ -11,6 +11,9 @@ import { t } from './i18n.svelte';
 /** Whether this build offers downloads at all. */
 export const downloadsEnabled = phone;
 
+/** The device's connection, as the webview sees it. Offline, only downloaded songs play. */
+export const net = $state({ online: typeof navigator === 'undefined' ? true : navigator.onLine });
+
 export const downloads = $state({
 	/** Every row, newest first, as Rust last listed them. */
 	items: [] as DownloadInfo[],
@@ -71,11 +74,42 @@ export function refreshDownloads(): Promise<void> {
 export function initDownloads(): () => void {
 	if (!downloadsEnabled) return () => {};
 	void refreshDownloads();
+	const up = () => (net.online = true);
+	const down = () => (net.online = false);
+	net.online = navigator.onLine;
+	window.addEventListener('online', up);
+	window.addEventListener('offline', down);
+	// Offline, a list plays only its downloaded songs, and one with none doesn't play at all.
+	api.offline.guard = (items, start) => {
+		if (net.online) return { items, start };
+		const ok = (s: SongItem) => api.isLocalId(s.video_id) || isDownloaded(s.video_id);
+		if (start !== null && items[start] && !ok(items[start])) {
+			toast(t('downloads.not_downloaded'));
+			return null;
+		}
+		const kept = items.filter(ok);
+		if (!kept.length) {
+			toast(items.length === 1 ? t('downloads.not_downloaded') : t('downloads.none_downloaded'));
+			return null;
+		}
+		if (kept.length === items.length) return { items, start };
+		return { items: kept, start: start === null ? null : kept.indexOf(items[start]) };
+	};
 	const off: Array<Promise<() => void>> = [
 		api.onDownloadsChanged(() => void refreshDownloads()),
 		api.onDownloadProgress((p) => (downloads.progress = p))
 	];
-	return () => off.forEach((u) => u.then((f) => f()));
+	return () => {
+		window.removeEventListener('online', up);
+		window.removeEventListener('offline', down);
+		api.offline.guard = null;
+		off.forEach((u) => u.then((f) => f()));
+	};
+}
+
+/** Offline: how many of these songs can play. */
+export function playableOffline(songs: SongItem[]): number {
+	return songs.filter((s) => api.isLocalId(s.video_id) || isDownloaded(s.video_id)).length;
 }
 
 export function statusOf(id: string | undefined | null): DownloadInfo['status'] | undefined {

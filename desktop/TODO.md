@@ -40,3 +40,12 @@ These shipped on Android first (2.1–2.2). Bring them to Windows in the next de
   partitions — copy `persist:octave`'s partition folder to `persist:octave-saved` while Octave's
   view is closed, open the saved partition with `session.enableNetworkEmulation({ offline: true })`
   (or a webRequest block), and put the switch in Octave's toolbar.
+- **Offline library for YouTube Music.** User request, 2026-11-05: offline, the Library still
+  shows every playlist (and album), with the songs that aren't downloaded greyed out; Play and
+  Shuffle play only the downloaded ones, and a list with none downloaded doesn't play. Engine
+  (shared, already in): `commands.rs` `snapshot` keeps the last copy of the library, each playlist
+  and each album page in `page_snapshots` and serves it when YouTube can't be reached, and
+  `sync_offline_pages` keeps a whole copy of every library playlist/album (twice a day at most).
+  UI (shared): `api.offline.guard` filters what plays, `TrackRow` greys `data-offline-missing`
+  rows, `OfflineNote` says "N of M downloaded". On desktop it is all gated by `downloadsEnabled`
+  (= `phone`) and `net.online`; lifting the gate with the downloads feature brings it along.

@@ -1150,6 +1150,8 @@ export function playFrom(
 	shuffle?: boolean,
 	continuation?: string
 ) {
+	// Offline with nothing here downloaded: don't open the player on a list that can't play.
+	if (api.offline.guard && !api.offline.guard(items, start)) return Promise.resolve();
 	pl.noteRecent(personal, source);
 	pl.touchPick(personal, source.id);
 	savePersonal();

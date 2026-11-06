@@ -377,7 +377,15 @@ export const searchSuggestions = (query: string) =>
 /** Filtered "Show more" card search for one category (albums / artists / playlists). */
 export const searchCards = (query: string, category: 'albums' | 'artists' | 'playlists') =>
 	invoke<BrowseItem[]>('search_cards', { query, category });
-export const play = (item: SongItem) => invoke<void>('play', { item });
+/**
+ * Jam for Android, offline: what can play right now (downloads.svelte.ts sets it). Answers the
+ * songs to play and where to start, or null (it has said why) when none of them can.
+ */
+export const offline = {
+	guard: null as null | ((items: SongItem[], start: number | null) => { items: SongItem[]; start: number | null } | null)
+};
+export const play = (item: SongItem) =>
+	offline.guard && !offline.guard([item], 0) ? Promise.resolve() : invoke<void>('play', { item });
 /** `start` (seconds) opens the track that far in, for a timecode link. */
 export const playIndex = (index: number, start?: number) =>
 	invoke<void>('play_index', { index, start });
@@ -393,16 +401,21 @@ export const moveInQueue = (from: number, to: number) =>
  * "Play next": insert tracks right behind the playing one, behind any earlier "Play next" adds.
  * `from` is the album/playlist they came from.
  */
-export const playNext = (items: SongItem[], from?: string) =>
-	invoke<void>('play_next', { items, from });
+export const playNext = (items: SongItem[], from?: string) => {
+	const ok = offline.guard ? offline.guard(items, null) : { items };
+	return ok ? invoke<void>('play_next', { items: ok.items, from }) : Promise.resolve();
+};
 /**
  * "Add to queue": the tracks go at the tail of the queue, behind the rest of the playing album or
  * playlist and anything added before, ahead of autoplay (#369). On a radio they go ahead of the
  * generated tracks instead. `continuation` is the source page's next-page token: the backend walks
  * the rest of a long playlist into the queue in the background.
  */
-export const addToQueue = (items: SongItem[], from?: string, continuation?: string) =>
-	invoke<void>('add_to_queue', { items, from, continuation });
+export const addToQueue = (items: SongItem[], from?: string, continuation?: string) => {
+	const ok = offline.guard ? offline.guard(items, null) : { items };
+	if (!ok) return Promise.resolve();
+	return invoke<void>('add_to_queue', { items: ok.items, from, continuation: ok.items === items ? continuation : undefined });
+};
 /** Clear every upcoming track added by hand, with Play next or Add to queue. */
 export const clearQueued = () => invoke<void>('clear_queued');
 export const nextTrack = () => invoke<void>('next_track');
@@ -852,7 +865,13 @@ export const playPlaylist = (
 	sourceName?: string,
 	shuffle?: boolean,
 	continuation?: string
-) => invoke<void>('play_playlist', { items, start, sourceId, sourceName, shuffle, continuation });
+) => {
+	const ok = offline.guard ? offline.guard(items, start) : { items, start };
+	if (!ok) return Promise.resolve();
+	// Offline the rest of a long list can't be fetched, and the songs left out can't play.
+	const cont = ok.items === items ? continuation : undefined;
+	return invoke<void>('play_playlist', { items: ok.items, start: ok.start, sourceId, sourceName, shuffle, continuation: cont });
+};
 /**
  * Start a radio: an endless YouTube-generated queue seeded on this item. `id` is the videoId
  * (song) or browseId/playlistId (everything else) — Rust resolves it to a radio playlist, so the

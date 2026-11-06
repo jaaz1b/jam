@@ -25,6 +25,7 @@
 	import ArtistLine from './ArtistLine.svelte';
 	import ExplicitIcon from './ExplicitIcon.svelte';
 	import DownloadBadge from './DownloadBadge.svelte';
+	import { downloads, downloadsEnabled, net } from '$lib/downloads.svelte';
 	import { currentLocale, t } from '$lib/i18n.svelte';
 	import { keyOf } from '$lib/shortcuts';
 	import type { TrackSelection } from '$lib/selection.svelte';
@@ -108,6 +109,10 @@
 		trailing?: Snippet;
 	} = $props();
 	const selectionDescriptionId = $props.id();
+	// Offline (Jam for Android): a song that isn't downloaded can't play, so it reads as such.
+	const unplayable = $derived(
+		downloadsEnabled && !net.online && !api.isLocalId(song.video_id) && downloads.byId[song.video_id]?.status !== 'done'
+	);
 
 	// In a session as guest, clicking a song adds it to the shared queue instead of playing it —
 	// reflect that in the hover icon + label so the row doesn't lie.
@@ -252,7 +257,10 @@
 		? 'bg-primary/15'
 		: active
 		? 'bg-accent/10'
-		: ''} {lazy && !compact ? '[content-visibility:auto] [contain-intrinsic-size:auto_3.5rem]' : ''}"
+		: ''} {lazy && !compact ? '[content-visibility:auto] [contain-intrinsic-size:auto_3.5rem]' : ''} {unplayable
+		? 'opacity-40'
+		: ''}"
+	data-offline-missing={unplayable ? '' : undefined}
 >
 	{#if selectable}
 		<span id={selectionDescriptionId} class="sr-only">

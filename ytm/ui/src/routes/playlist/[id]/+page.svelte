@@ -37,6 +37,8 @@
 	import TrackSelectionBar from '$lib/components/TrackSelectionBar.svelte';
 	import TrackSelectButton from '$lib/components/TrackSelectButton.svelte';
 	import DownloadButton from '$lib/components/DownloadButton.svelte';
+	import OfflineNote from '$lib/components/OfflineNote.svelte';
+	import { downloadsEnabled, net, playableOffline } from '$lib/downloads.svelte';
 	import { trackSelection } from '$lib/selection.svelte';
 	import { subtitleCount, withSubtitleCount } from '$lib/trackcount';
 	import EditPlaylistDialog from '$lib/components/EditPlaylistDialog.svelte';
@@ -1269,7 +1271,7 @@
 							<Button
 								class="gap-2"
 								onclick={() => playAll(null)}
-								disabled={!pl.items.length || preparing || resorting}
+								disabled={!pl.items.length || preparing || resorting || (downloadsEnabled && !net.online && playableOffline(pl.items) === 0)}
 							>
 								<HugeiconsIcon icon={PlayIcon} class="h-4 w-4" />
 								{preparing || resorting ? t('common.sorting') : t('player.play')}
@@ -1342,6 +1344,7 @@
 					/>
 				</div>
 			</div>
+			{#if pl}<OfflineNote songs={pl.items} />{/if}
 			<TrackSelectionBar
 				{selection}
 				from={pl.title}

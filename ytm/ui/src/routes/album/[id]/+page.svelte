@@ -22,6 +22,8 @@
     import TrackSelectionBar from "$lib/components/TrackSelectionBar.svelte";
     import TrackSelectButton from "$lib/components/TrackSelectButton.svelte";
     import DownloadButton from "$lib/components/DownloadButton.svelte";
+    import OfflineNote from "$lib/components/OfflineNote.svelte";
+    import { downloadsEnabled, net, playableOffline } from "$lib/downloads.svelte";
     import { trackSelection } from "$lib/selection.svelte";
     import TrackFilter, {
         filterTracks,
@@ -71,6 +73,8 @@
     const id = $derived(page.params.id ?? "");
     // The rows actually on screen. Identical to `album.items` with no query typed.
     const shown = $derived(filterTracks(album?.items ?? [], query));
+    // Offline with none of it downloaded: nothing to play.
+    const offlineNone = $derived(downloadsEnabled && !net.online && playableOffline(album?.items ?? []) === 0);
     const selection = trackSelection(() => album?.items ?? [], () => shown, () => `${auth.epoch}:${id}`);
     // The optional columns (`TrackColumns`). Album is never one here: every row would repeat the title.
     const availCols = $derived(availableColumns(album?.items ?? [], true));
@@ -351,14 +355,14 @@
                 <button
                     class="flex cursor-pointer items-center gap-2 rounded-full text-foreground bg-primary px-6 py-2.5 text-sm font-semibold transition hover:opacity-90 disabled:opacity-50"
                     onclick={() => playAll(null)}
-                    disabled={!album.items.length}
+                    disabled={!album.items.length || offlineNone}
                 >
                     <HugeiconsIcon icon={PlayIcon} class="h-4 w-4" /> {t("player.play")}
                 </button>
                 <button
                     class="flex cursor-pointer items-center gap-2 rounded-full border px-5 py-2.5 text-sm font-semibold transition hover:bg-accent/10 disabled:opacity-50"
                     onclick={shuffle}
-                    disabled={!album.items.length}
+                    disabled={!album.items.length || offlineNone}
                 >
                     <HugeiconsIcon icon={ShuffleIcon} class="h-4 w-4" /> {t("common.shuffle")}
                 </button>
@@ -498,6 +502,7 @@
         {#if phone}
             <div class="mb-2 px-1"><TrackFilter bind:value={query} placeholder={t("common.search_this_album")} /></div>
         {/if}
+        <OfflineNote songs={album.items} />
         <TrackSelectionBar {selection} from={album.title} downloadContext={{ thumbnail: album.thumbnail, album: album.title, albumId: id }} />
         {#if shown.length}
             <!-- Its width decides which columns fit (`fitColumns`). -->
