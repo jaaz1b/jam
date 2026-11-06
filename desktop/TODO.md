@@ -22,4 +22,8 @@ Both of these shipped on Android first (2.1). Bring them to Windows in the next 
   an event log shown on the offline page. Desktop: do the same in `desktop/src/page-scripts.js` /
   `sources.js` for Octave's view, check Electron keeps the service worker for its partition, and
   make the offline page in `desktop/src/offline.html` not hide Octave when the service worker can
-  answer.
+  answer. The cause on Android (2.1.1): Octave's worker turns on navigation preload, and offline
+  the failed preload request is reported as the page's own error, so Jam's error handler swapped
+  in its offline page and cancelled the worker's answer. Electron's `did-fail-load` may do the
+  same: check whether the page is service-worker controlled before replacing it, and turn
+  navigation preload off for Octave (`registration.navigationPreload.disable()`).
