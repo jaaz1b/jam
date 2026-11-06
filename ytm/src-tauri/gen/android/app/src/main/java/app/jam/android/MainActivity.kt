@@ -64,6 +64,8 @@ class JamWebView(context: Context, val sourceId: String) : WebView(context) {
     var keepAwake = true
     var clearHistoryOnLoad = false
     var failedUrl: String? = null
+    /** A main-frame error on an offline-capable app, waiting to see if its service worker answered. */
+    var errorCheck: Runnable? = null
 
     override fun onWindowVisibilityChanged(visibility: Int) {
         // Leaving the app hides the window; don't let the page find out, or it may stop the music.
@@ -82,6 +84,16 @@ class MainActivity : TauriActivity() {
         private const val TAG = "Jam"
         private const val BG = 0xFF0F0F13.toInt()
         private const val OFFLINE = "file:///android_asset/offline.html"
+        /**
+         * Whether the page on screen is the site, answered by its service worker, rather than
+         * WebView's error page: "served", "loading" (nothing to judge yet) or "error".
+         */
+        private const val SERVED_PROBE = "(function(){try{" +
+            "if(!/^https?:\$/.test(location.protocol))return 'error';" +
+            "if(document.readyState==='loading')return 'loading';" +
+            "var t=document.body?document.body.innerText:'';" +
+            "if(navigator.serviceWorker&&navigator.serviceWorker.controller&&t.indexOf('net::ERR_')<0)return 'served';" +
+            "return t?'error':'loading';}catch(e){return 'error'}})()"
         var instance: MainActivity? = null
             private set
 
@@ -672,19 +684,38 @@ class MainActivity : TauriActivity() {
         @JavascriptInterface fun offlineStatusFor(id: String): String = Prefs.secret("offline.$id") ?: ""
         /** What the app did with its service worker, newest last (the last 40 events), for the offline page. */
         @JavascriptInterface fun offlineLog(json: String?) {
-            if (json == null || json.length > 1000 || !Sources.exists(sourceId) || !Sources.byId(sourceId).offlineApp) return
-            synchronized(Bridge::class.java) {
-                val arr = try { JSONArray(Prefs.secret("offlinelog.$sourceId") ?: "[]") } catch (e: Exception) { JSONArray() }
-                arr.put(try { JSONObject(json) } catch (e: Exception) { return })
-                val keep = JSONArray()
-                for (i in maxOf(0, arr.length() - 40) until arr.length()) keep.put(arr.get(i))
-                Prefs.setSecret("offlinelog.$sourceId", keep.toString())
-            }
+            if (json == null || json.length > 1000) return
+            val o = try { JSONObject(json) } catch (e: Exception) { return }
+            appendOfflineLog(sourceId, o)
         }
         @JavascriptInterface fun offlineLogFor(id: String): String = Prefs.secret("offlinelog.$id") ?: "[]"
         @JavascriptInterface fun sources(): String =
             JSONArray(Sources.all().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }).toString()
     }
+
+    private fun showOffline(v: JamWebView, url: String, desc: String) {
+        v.failedUrl = url
+        val name = Sources.byId(v.sourceId).name
+        val q = "?src=" + Uri.encode(v.sourceId) + "&name=" + Uri.encode(name) + "&err=" + Uri.encode(desc)
+        v.loadUrl(OFFLINE + q)
+    }
+
+    private fun logOffline(sourceId: String, ev: String, detail: String) {
+        appendOfflineLog(sourceId, JSONObject().put("t", System.currentTimeMillis()).put("ev", ev).put("d", detail.take(300)).put("p", "jam"))
+    }
+
+    /** An offline-capable app's event log (installed-app.js and Jam's own), the last 40, for the offline page. */
+    private fun appendOfflineLog(sourceId: String, o: JSONObject) {
+        if (!Sources.exists(sourceId) || !Sources.byId(sourceId).offlineApp) return
+        synchronized(offlineLogLock) {
+            val arr = try { JSONArray(Prefs.secret("offlinelog.$sourceId") ?: "[]") } catch (e: Exception) { JSONArray() }
+            arr.put(o)
+            val keep = JSONArray()
+            for (i in maxOf(0, arr.length() - 40) until arr.length()) keep.put(arr.get(i))
+            Prefs.setSecret("offlinelog.$sourceId", keep.toString())
+        }
+    }
+    private val offlineLogLock = Any()
 
     private inner class Client(private val sourceId: String, private val fallbackScript: String?) : WebViewClient() {
         override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
@@ -727,11 +758,41 @@ class MainActivity : TauriActivity() {
             val v = view as? JamWebView ?: return
             val url = request.url.toString()
             if (url.startsWith("file:")) return
-            Log.w(TAG, "load failed ${error.errorCode} ${error.description} $url")
-            v.failedUrl = url
-            val name = Sources.byId(sourceId).name
-            val q = "?src=" + Uri.encode(sourceId) + "&name=" + Uri.encode(name) + "&err=" + Uri.encode(error.description?.toString() ?: "")
-            v.loadUrl(OFFLINE + q)
+            val desc = error.description?.toString() ?: ""
+            Log.w(TAG, "load failed ${error.errorCode} $desc $url")
+            if (Sources.exists(sourceId) && Sources.byId(sourceId).offlineApp) {
+                // An installed web app's service worker may be answering this page from its offline
+                // copy. WebView reports the request a worker sends alongside the page (navigation
+                // preload, which Octave's uses) failing as the page's own error, and swapping in the
+                // offline page now would cancel the worker's answer. So look before replacing it.
+                logOffline(sourceId, "page-error", "$desc $url")
+                v.errorCheck?.let { main.removeCallbacks(it) }
+                val check = object : Runnable {
+                    var tries = 0
+                    override fun run() {
+                        if (v.errorCheck !== this) return
+                        v.evaluateJavascript(SERVED_PROBE) { r ->
+                            if (v.errorCheck !== this) return@evaluateJavascript
+                            when {
+                                r?.contains("served") == true -> {
+                                    v.errorCheck = null
+                                    logOffline(sourceId, "served-offline", url)
+                                }
+                                r?.contains("loading") == true && ++tries < 5 -> main.postDelayed(this, 1500)
+                                else -> {
+                                    v.errorCheck = null
+                                    logOffline(sourceId, "not-served", r ?: "")
+                                    showOffline(v, url, desc)
+                                }
+                            }
+                        }
+                    }
+                }
+                v.errorCheck = check
+                main.postDelayed(check, 1200)
+                return
+            }
+            showOffline(v, url, desc)
         }
 
         override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: WebResourceResponse) {

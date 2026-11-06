@@ -95,12 +95,26 @@
       if (!navigator.serviceWorker) { lastError = 'this WebView has no service workers'; report('no-sw'); return; }
       if (!navigator.onLine) { report('offline'); return; }
       // Whatever covers this page, at any scope: a site whose worker lives elsewhere keeps it.
-      navigator.serviceWorker.getRegistration().then(function (r) {
+      // A site registering its own worker on load gets a few seconds to do it first.
+      var look = function () { return navigator.serviceWorker.getRegistration(); };
+      look().then(function (r) {
+        return r || new Promise(function (ok) { setTimeout(ok, 4000); }).then(look);
+      }).then(function (r) {
         if (r) { log('jam-found', JSON.stringify(regInfo(r))); return r; }
         log('jam-register', '/sw.js');
         return navigator.serviceWorker.register('/sw.js', { scope: '/' });
       }).then(function (r) {
         try { if (r && r.waiting) r.waiting.postMessage({ type: 'SKIP_WAITING' }); } catch (e) {}
+        // Navigation preload sends a second request for each page beside the worker's. Offline,
+        // WebView reports that request failing as the page failing, even when the worker answers
+        // from its offline copy, so Jam switches it off (the worker fetches the page itself).
+        try {
+          if (r && r.navigationPreload) {
+            r.navigationPreload.getState().then(function (st) {
+              if (st && st.enabled) return r.navigationPreload.disable().then(function () { log('preload-off'); });
+            }).catch(function () {});
+          }
+        } catch (e) {}
         report('registered');
       }, function (e) {
         lastError = 'register: ' + (e && (e.message || e.name) || e);

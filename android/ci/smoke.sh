@@ -161,7 +161,23 @@ kill "$SERVER" 2>/dev/null; sleep 1
 adb shell am force-stop "$PKG"
 timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
 sleep 12; shot "$(printf %02d $n)-offline-app-server-gone"; n=$((n+1))
-summary "Offline web app status: $(adb shell "grep -o 'secret.offline.c_offlinetest[^<]*' /data/data/$PKG/shared_prefs/jam.xml" 2>/dev/null | head -c 600)"
+# And with the phone offline, the way Octave is used.
+adb shell am force-stop "$PKG"
+adb shell cmd connectivity airplane-mode enable; adb shell svc wifi disable; adb shell svc data disable; sleep 6
+timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
+sleep 14; shot "$(printf %02d $n)-offline-app-airplane"; n=$((n+1))
+adb shell cmd connectivity airplane-mode disable; adb shell svc wifi enable; adb shell svc data enable; sleep 4
+adb shell "cat /data/data/$PKG/shared_prefs/jam.xml" 2>/dev/null > "$OUT/jam-prefs.xml"
+python3 - "$OUT/jam-prefs.xml" <<'PY' | tee -a "$OUT/summary.txt"
+import html, json, re, sys
+x = open(sys.argv[1]).read()
+for key in ('secret.offline.c_offlinetest', 'secret.offlinelog.c_offlinetest'):
+    m = re.search(r'name="' + re.escape(key) + r'">([^<]*)<', x)
+    if not m: print(key + ': (none)'); continue
+    v = json.loads(html.unescape(m.group(1)))
+    if isinstance(v, list): print('Offline web app events: ' + ' | '.join(e.get('ev', '') + (' ' + e.get('d', '')[:60] if e.get('d') else '') for e in v[-14:]))
+    else: print('Offline web app status: why=%s controlled=%s regs=%d error=%s' % (v.get('why'), v.get('controlled'), len(v.get('registrations') or []), (v.get('error') or '')[:120]))
+PY
 
 # Logs: the engine's own (limusic.log) and logcat.
 timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
