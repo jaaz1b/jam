@@ -1,6 +1,6 @@
 # Desktop: for the next desktop release
 
-Both of these shipped on Android first (2.1). Bring them to Windows in the next desktop version.
+These shipped on Android first (2.1–2.2). Bring them to Windows in the next desktop version.
 
 - **YouTube Music downloads (offline listening).** The download manager lives in the shared
   engine (`ytm/src-tauri/src/downloads.rs`), modeled on Meld: songs, albums, playlists and
@@ -27,3 +27,16 @@ Both of these shipped on Android first (2.1). Bring them to Windows in the next 
   in its offline page and cancelled the worker's answer. Electron's `did-fail-load` may do the
   same: check whether the page is service-worker controlled before replacing it, and turn
   navigation preload off for Octave (`registration.navigationPreload.disable()`).
+- **Octave saved state (the offline switch).** User request, 2026-11-05: a switch between Octave's
+  live site and a "saved state" — a frozen copy of everything Octave keeps (pages, offline worker,
+  downloaded tracks, login) that opens with no network, so the site being down, erroring or
+  changed doesn't matter, and Octave launches into it while the switch is on. Android (2.2):
+  `SavedState.kt` copies WebView profile `src_octave` to `saved_octave` at the start of a fresh
+  process (Save restarts Jam via `RestartActivity`), hard-linking large immutable files (LevelDB
+  tables, IndexedDB blobs, CacheStorage entries) so downloads aren't stored twice; the saved
+  profile runs with `blockNetworkLoads` on the page and its service worker, and `installed-app.js`
+  reports `navigator.onLine = false`. UI: a save button in the source bar (switch, Save now, Delete)
+  and "Open my saved state" on the offline page. Desktop: the same with Electron session
+  partitions — copy `persist:octave`'s partition folder to `persist:octave-saved` while Octave's
+  view is closed, open the saved partition with `session.enableNetworkEmulation({ offline: true })`
+  (or a webRequest block), and put the switch in Octave's toolbar.

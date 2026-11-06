@@ -27,6 +27,7 @@
   <img src="jam-icon.png" alt="">
   <h1 id="title">Can't reach this source</h1>
   <p id="msg">It may be down for maintenance, or you're offline.</p>
+  <button class="primary" id="saved" hidden>Open my saved state</button>
   <button class="primary" id="retry">Try again</button>
   <div class="muted" id="switchLabel">Or switch to another source:</div>
   <div class="list" id="list"></div>
@@ -41,6 +42,23 @@
   if (!navigator.onLine) document.getElementById('msg').textContent = "You're offline. Jam will try again when you're back online.";
   const J = window.JamNative;
   document.getElementById('retry').onclick = () => J && J.retry();
+  // Web apps with a saved state (Jam's save button): open it, or, if it's the save that failed,
+  // go back to the live site.
+  try {
+    if (J && J.savedModeFor && J.savedModeFor(src)) {
+      document.getElementById('title').textContent = "Your saved " + name + " didn't open";
+      document.getElementById('msg').textContent = 'The saved state may be incomplete. Save again from the live site, or open the live site now.';
+      const b = document.getElementById('saved');
+      b.textContent = 'Open the live site'; b.hidden = false;
+      b.onclick = () => J.useSaved(src, false);
+      document.getElementById('retry').className = '';
+    } else if (J && J.hasSaved && J.hasSaved(src)) {
+      const b = document.getElementById('saved');
+      b.hidden = false;
+      b.onclick = () => J.useSaved(src, true);
+      document.getElementById('retry').className = '';
+    }
+  } catch (e) {}
   window.addEventListener('online', () => J && J.retry());
   // Offline-capable apps (Octave): what Jam last saw of the app's offline copy.
   try {

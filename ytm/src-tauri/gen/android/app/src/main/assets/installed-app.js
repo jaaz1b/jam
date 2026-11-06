@@ -10,6 +10,17 @@
   window.__jamInstalledApp = true;
 
   var J = window.JamNative;
+  // A saved state (Jam's SavedState.kt): Jam blocks the network for it, and the site has to know
+  // it is offline so it uses its downloads and saved pages rather than trying to stream.
+  var saved = false;
+  try { saved = !!(J && J.savedMode && J.savedMode()); } catch (e) {}
+  if (saved) {
+    try {
+      Object.defineProperty(Navigator.prototype, 'onLine', { configurable: true, get: function () { return false; } });
+      window.addEventListener('online', function (e) { e.stopImmediatePropagation(); }, true);
+    } catch (e) {}
+    window.__jamSavedState = true;
+  }
   function log(ev, detail) {
     try {
       if (J && J.offlineLog) J.offlineLog(JSON.stringify({ t: Date.now(), ev: ev, d: detail == null ? '' : String(detail).slice(0, 300), p: location.pathname }));
@@ -91,7 +102,7 @@
   // registered one itself. Registering needs the network.
   function ensure() {
     try {
-      log('page', (navigator.onLine ? 'online' : 'offline') + ' · controlled=' + !!(navigator.serviceWorker && navigator.serviceWorker.controller) + ' · ' + navigator.userAgent.slice(0, 120));
+      log('page', (saved ? 'saved state' : navigator.onLine ? 'online' : 'offline') + ' · controlled=' + !!(navigator.serviceWorker && navigator.serviceWorker.controller) + ' · ' + navigator.userAgent.slice(0, 120));
       if (!navigator.serviceWorker) { lastError = 'this WebView has no service workers'; report('no-sw'); return; }
       if (!navigator.onLine) { report('offline'); return; }
       // Whatever covers this page, at any scope: a site whose worker lives elsewhere keeps it.

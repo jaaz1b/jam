@@ -136,6 +136,9 @@ class MainActivity : TauriActivity() {
     private var fileCallback: ValueCallback<Array<Uri>>? = null
     private var popup: Dialog? = null
     private var lastHttpToast = 0L
+    /** Saved state (SavedState.kt): shown for web apps that work offline. */
+    private lateinit var savedButton: ImageButton
+    private var savedWait: View? = null
     /** YouTube Music's webview (Tauri's), once Tauri hands it over. */
     private var engineView: WebView? = null
     private var pendingLink: String? = null
@@ -221,8 +224,26 @@ class MainActivity : TauriActivity() {
             Sources.exists(Prefs.str("defaultSource")) -> Prefs.str("defaultSource")
             else -> "octave"
         }
-        switchSource(start)
-        handleLink(intent)
+        // A saved state being made (Jam just restarted for it): nothing may open the site's data
+        // until it's done.
+        SavedState.busy?.let { id ->
+            savedWait = TextView(this).apply {
+                text = "Saving ${if (Sources.exists(id)) Sources.byId(id).name else "the site"} as it is now…"
+                setTextColor(0xFFB8B8C6.toInt()); textSize = 15f; gravity = Gravity.CENTER
+            }.also { container.addView(it, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)) }
+            progress.isIndeterminate = true; progress.visibility = View.VISIBLE
+        }
+        val intentNow = intent
+        SavedState.whenReady {
+            savedWait?.let { container.removeView(it); savedWait = null; progress.isIndeterminate = false; progress.visibility = View.INVISIBLE }
+            Prefs.secret("savedJustMade")?.let { id ->
+                Prefs.setSecretNow("savedJustMade", null)
+                val err = SavedState.lastError(id)
+                Toast.makeText(this, if (err != null) "Couldn't save: $err" else "Saved. ${Sources.byId(id).name} now opens your saved state.", Toast.LENGTH_LONG).show()
+            }
+            switchSource(start)
+            handleLink(intentNow)
+        }
         askForNotifications()
     }
 
@@ -379,6 +400,8 @@ class MainActivity : TauriActivity() {
             addView(chips)
         }
         bar.addView(scroll, LinearLayout.LayoutParams(0, dp(46), 1f))
+        savedButton = iconButton(R.drawable.ic_saved, "Saved state") { active?.let { showSavedState(it) } }.apply { visibility = View.GONE }
+        bar.addView(savedButton)
         bar.addView(iconButton(R.drawable.ic_refresh, "Reload") { reload() }.apply {
             setOnLongClickListener { goHome(); true }
         })
@@ -423,7 +446,7 @@ class MainActivity : TauriActivity() {
             val on = s.id == active
             val dot = GradientDrawable().apply { shape = GradientDrawable.OVAL; setColor(color); setSize(dp(8), dp(8)) }
             val chip = TextView(this).apply {
-                text = s.name
+                text = if (s.offlineApp && SavedState.enabled(s.id)) "${s.name} · Saved" else s.name
                 textSize = 14f
                 setTextColor(if (on) Color.WHITE else 0xFFB8B8C6.toInt())
                 typeface = if (on) android.graphics.Typeface.DEFAULT_BOLD else android.graphics.Typeface.DEFAULT
@@ -445,12 +468,21 @@ class MainActivity : TauriActivity() {
             if (on) progress.progressTintList = android.content.res.ColorStateList.valueOf(color)
         }
         activeChip?.let { c -> chips.post { (chips.parent as? HorizontalScrollView)?.smoothScrollTo(maxOf(0, c.left - dp(40)), 0) } }
+        val a = active
+        val offlineApp = a != null && a != Sources.YTM && Sources.exists(a) && Sources.byId(a).offlineApp && profilesSupported
+        savedButton.visibility = if (offlineApp) View.VISIBLE else View.GONE
+        if (offlineApp) {
+            val on = SavedState.enabled(a!!)
+            savedButton.setColorFilter(if (on) 0xFFA78BFA.toInt() else 0xFFB8B8C6.toInt())
+            savedButton.contentDescription = if (on) "Saved state, on" else "Saved state"
+        }
     }
 
     // ================================================================== sources
 
     fun switchSource(id: String) {
         if (!Sources.exists(id)) return
+        if (SavedState.busy == id) return
         if (id == active && (views[id] != null || id == Sources.YTM)) return
         val prev = active
         // The source you leave is paused, as on desktop.
@@ -613,9 +645,14 @@ class MainActivity : TauriActivity() {
 
     @SuppressLint("SetJavaScriptEnabled", "RequiresFeature")
     private fun configure(wv: WebView, src: Source) {
+        val saved = savedMode(src)
         if (profilesSupported) {
-            ProfileStore.getInstance().getOrCreateProfile(profileName(src.id))
-            WebViewCompat.setProfile(wv, profileName(src.id))
+            val name = if (saved) SavedState.savedProfile(src.id) else profileName(src.id)
+            val profile = ProfileStore.getInstance().getOrCreateProfile(name)
+            // The saved state never touches the network: its own pages answer everything, from
+            // the site's offline worker, exactly as with no internet.
+            if (saved) runCatching { profile.serviceWorkerController.serviceWorkerWebSettings.blockNetworkLoads = true }
+            WebViewCompat.setProfile(wv, name)
         }
         wv.setBackgroundColor(BG)
         wv.settings.apply {
@@ -631,6 +668,7 @@ class MainActivity : TauriActivity() {
             allowFileAccess = false
             allowContentAccess = false
             if (!src.offlineApp) userAgentString = userAgent(src.desktopSite)
+            blockNetworkLoads = saved
         }
         CookieManager.getInstance().setAcceptThirdPartyCookies(wv, true)
         if (WebViewFeature.isFeatureSupported(WebViewFeature.REQUESTED_WITH_HEADER_ALLOW_LIST)) {
@@ -682,6 +720,11 @@ class MainActivity : TauriActivity() {
             }
         }
         @JavascriptInterface fun offlineStatusFor(id: String): String = Prefs.secret("offline.$id") ?: ""
+        /** This page is a saved state (SavedState.kt): it must behave as offline. */
+        @JavascriptInterface fun savedMode(): Boolean = Sources.exists(sourceId) && savedMode(Sources.byId(sourceId))
+        @JavascriptInterface fun savedModeFor(id: String): Boolean = Sources.exists(id) && savedMode(Sources.byId(id))
+        @JavascriptInterface fun hasSaved(id: String): Boolean = Sources.exists(id) && Sources.byId(id).offlineApp && profilesSupported && SavedState.exists(id)
+        @JavascriptInterface fun useSaved(id: String, on: Boolean) { main.post { setSavedMode(id, on) } }
         /** What the app did with its service worker, newest last (the last 40 events), for the offline page. */
         @JavascriptInterface fun offlineLog(json: String?) {
             if (json == null || json.length > 1000) return
@@ -691,6 +734,106 @@ class MainActivity : TauriActivity() {
         @JavascriptInterface fun offlineLogFor(id: String): String = Prefs.secret("offlinelog.$id") ?: "[]"
         @JavascriptInterface fun sources(): String =
             JSONArray(Sources.all().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }).toString()
+    }
+
+    private fun savedMode(src: Source) = src.offlineApp && profilesSupported && SavedState.enabled(src.id)
+
+    /** Switch a source between its live site and its saved state: a new page in the other profile. */
+    private fun setSavedMode(id: String, on: Boolean) {
+        if (!Sources.exists(id) || (on && !SavedState.exists(id))) return
+        if (SavedState.enabled(id) == on && views[id] != null) return
+        SavedState.setEnabled(id, on)
+        discard(id)
+        if (active == id) { active = null; switchSource(id) } else renderChips()
+        val name = Sources.byId(id).name
+        Toast.makeText(this, if (on) "$name: your saved state, offline" else "$name: the live site", Toast.LENGTH_SHORT).show()
+    }
+
+    private fun showSavedState(id: String) {
+        if (!Sources.exists(id)) return
+        val src = Sources.byId(id)
+        val ctx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        val pad = dp(22)
+        val box = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL; setPadding(pad, dp(8), pad, 0) }
+        fun text(t: String, size: Float, color: Int, top: Int = 0) = TextView(ctx).apply {
+            text = t; textSize = size; setTextColor(color); setPadding(0, top, 0, 0)
+        }
+        val has = SavedState.exists(id)
+        val row = LinearLayout(ctx).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+        val labels = LinearLayout(ctx).apply { orientation = LinearLayout.VERTICAL }
+        labels.addView(text("Open my saved state", 16f, Color.WHITE))
+        labels.addView(text(if (has) "Opens with no internet, exactly as saved. Off: the live site." else "Save a state first.", 13f, 0xFF9B9BAB.toInt(), dp(2)))
+        row.addView(labels, LinearLayout.LayoutParams(0, WRAP_CONTENT, 1f))
+        val toggle = android.widget.Switch(ctx).apply {
+            isChecked = SavedState.enabled(id)
+            isEnabled = has
+            contentDescription = "Open my saved state"
+        }
+        row.addView(toggle)
+        box.addView(row)
+        val info = if (has) {
+            val whenSaved = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(SavedState.savedAt(id)))
+            "Saved $whenSaved · ${formatSize(SavedState.size(id))}"
+        } else "No saved state yet."
+        box.addView(text(info, 13f, 0xFF9B9BAB.toInt(), dp(16)))
+        SavedState.lastError(id)?.let { box.addView(text("Last save failed: $it", 13f, 0xFFF87171.toInt(), dp(6))) }
+        box.addView(text("Saving keeps everything ${src.name} has on this phone as it is now: its pages, your downloaded tracks and your login. Download the tracks you want first. Jam restarts for a few seconds to save.", 13f, 0xFF9B9BAB.toInt(), dp(12)))
+
+        val dialog = android.app.AlertDialog.Builder(ctx)
+            .setTitle("${src.name}: saved state")
+            .setView(box)
+            .setPositiveButton(if (has) "Save again" else "Save now", null)
+            .setNegativeButton("Close", null)
+            .apply { if (has) setNeutralButton("Delete", null) }
+            .create()
+        toggle.setOnCheckedChangeListener { _, on -> dialog.dismiss(); setSavedMode(id, on) }
+        dialog.setOnShowListener {
+            dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                dialog.dismiss()
+                confirmSave(id)
+            }
+            dialog.getButton(android.app.AlertDialog.BUTTON_NEUTRAL)?.setOnClickListener {
+                dialog.dismiss()
+                android.app.AlertDialog.Builder(ctx)
+                    .setTitle("Delete the saved state?")
+                    .setMessage("${src.name} will open the live site. Your live site and its downloads aren't touched. Jam restarts for a moment.")
+                    .setPositiveButton("Delete") { _, _ -> SavedState.deleteAndRestart(this, id) }
+                    .setNegativeButton("Cancel", null)
+                    .show()
+            }
+        }
+        dialog.show()
+    }
+
+    private fun confirmSave(id: String) {
+        val src = Sources.byId(id)
+        val ctx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
+        android.app.AlertDialog.Builder(ctx)
+            .setTitle("Save ${src.name} as it is now?")
+            .setMessage((if (SavedState.exists(id)) "This replaces your current saved state. " else "") +
+                "Jam saves the live site's pages and downloads, then opens ${src.name} from the save from now on. Music stops while Jam restarts.")
+            .setPositiveButton("Save") { _, _ ->
+                progress.isIndeterminate = true; progress.visibility = View.VISIBLE
+                // The live site's page is closed first so its data stops changing.
+                discard(id)
+                Prefs.setSecretNow("savedJustMade", id)
+                SavedState.saveAndRestart(this, id) { err ->
+                    if (err != null) {
+                        Prefs.setSecretNow("savedJustMade", null)
+                        progress.isIndeterminate = false; progress.visibility = View.INVISIBLE
+                        Toast.makeText(this, err, Toast.LENGTH_LONG).show()
+                        if (active == id) { active = null; switchSource(id) }
+                    }
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    private fun formatSize(b: Long): String = when {
+        b >= 1L shl 30 -> String.format("%.1f GB", b / (1L shl 30).toDouble())
+        b >= 1L shl 20 -> String.format("%.0f MB", b / (1L shl 20).toDouble())
+        else -> "${b / 1024} KB"
     }
 
     private fun showOffline(v: JamWebView, url: String, desc: String) {
@@ -802,7 +945,9 @@ class MainActivity : TauriActivity() {
             val now = System.currentTimeMillis()
             if (now - lastHttpToast < 15_000) return
             lastHttpToast = now
-            Toast.makeText(this@MainActivity, "${Sources.byId(sourceId).name} is having trouble (${response.statusCode}). Tap another source above to switch.", Toast.LENGTH_LONG).show()
+            val src = Sources.byId(sourceId)
+            val hint = if (src.offlineApp && SavedState.exists(sourceId)) "Tap the save button above to open your saved state." else "Tap another source above to switch."
+            Toast.makeText(this@MainActivity, "${src.name} is having trouble (${response.statusCode}). $hint", Toast.LENGTH_LONG).show()
         }
 
         override fun onRenderProcessGone(view: WebView, detail: RenderProcessGoneDetail): Boolean {

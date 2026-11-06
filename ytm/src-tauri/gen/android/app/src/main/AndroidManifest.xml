@@ -83,6 +83,15 @@
             </intent-filter>
         </activity>
 
+        <!-- Restarts Jam to make a saved state (SavedState.kt), from a process of its own. -->
+        <activity
+            android:name=".RestartActivity"
+            android:exported="false"
+            android:process=":restart"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@style/Theme.Jam.Invisible" />
+
         <service
             android:name=".PlaybackService"
             android:exported="false"

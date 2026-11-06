@@ -88,7 +88,7 @@ for m in re.finditer(r'<node [^>]*>', x):
     t = re.search(r' text="([^"]*)"', n); d = re.search(r' content-desc="([^"]*)"', n)
     b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
     if not b: continue
-    if want in {html.unescape(t.group(1)) if t else '', html.unescape(d.group(1)) if d else ''}:
+    if want.lower() in {(html.unescape(t.group(1)) if t else '').lower(), (html.unescape(d.group(1)) if d else '').lower()}:
         a, c, e, f = map(int, b.groups())
         if e > a and f > c: hits.append(((a + e) // 2, (c + f) // 2))
 if hits:
@@ -178,6 +178,31 @@ for key in ('secret.offline.c_offlinetest', 'secret.offlinelog.c_offlinetest'):
     if isinstance(v, list): print('Offline web app events: ' + ' | '.join(e.get('ev', '') + (' ' + e.get('d', '')[:60] if e.get('d') else '') for e in v[-14:]))
     else: print('Offline web app status: why=%s controlled=%s regs=%d error=%s' % (v.get('why'), v.get('controlled'), len(v.get('registrations') or []), (v.get('error') or '')[:120]))
 PY
+
+# Saved state (the save button for web apps that work offline): save the test site, then check it
+# opens from the save without asking the server for anything, and that the switch goes back live.
+python3 -m http.server 8000 --directory "$(dirname "$0")" </dev/null >/dev/null 2>"$OUT/server.log" &
+SERVER=$!
+adb reverse tcp:8000 tcp:8000 >/dev/null
+adb shell am force-stop "$PKG"
+timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null; sleep 12
+shot "$(printf %02d $n)-saved-live"; n=$((n+1))
+if tap "Saved state"; then
+  sleep 2; shot "$(printf %02d $n)-saved-dialog"; n=$((n+1))
+  tap "Save now" && sleep 2 && tap "Save" && sleep 30
+  shot "$(printf %02d $n)-saved-after-restart"; n=$((n+1))
+  BEFORE=$(grep -c 'GET /offline-pwa' "$OUT/server.log")
+  adb shell am force-stop "$PKG"; timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null; sleep 14
+  shot "$(printf %02d $n)-saved-reopened"; n=$((n+1))
+  AFTER=$(grep -c 'GET /offline-pwa' "$OUT/server.log")
+  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-saved.xml" >/dev/null 2>&1
+  summary "Saved state: requests to the site while it was open: $((AFTER - BEFORE)); page says: $(grep -oE 'Served with the service worker[^"]*' "$OUT/ui-saved.xml" | head -1); chip: $(grep -oE 'Offline test · Saved' "$OUT/ui-saved.xml" | head -1)"
+  # Back to the live site with the switch.
+  tap "Saved state, on" && sleep 2 && tap "Open my saved state" && sleep 12
+  shot "$(printf %02d $n)-saved-switched-live"; n=$((n+1))
+  summary "Live again: requests to the site: $(( $(grep -c 'GET /offline-pwa' "$OUT/server.log") - AFTER ))"
+fi
+kill "$SERVER" 2>/dev/null
 
 # Logs: the engine's own (limusic.log) and logcat.
 timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device

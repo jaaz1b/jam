@@ -84,4 +84,8 @@ object Prefs {
     fun setSecret(key: String, value: String?) {
         sp.edit().apply { if (value == null) remove("secret.$key") else putString("secret.$key", value) }.apply()
     }
+    /** Same, written to disk before returning (the process is about to restart). */
+    fun setSecretNow(key: String, value: String?) {
+        sp.edit().apply { if (value == null) remove("secret.$key") else putString("secret.$key", value) }.commit()
+    }
 }
