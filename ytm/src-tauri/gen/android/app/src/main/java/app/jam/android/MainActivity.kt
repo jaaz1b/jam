@@ -640,7 +640,7 @@ class MainActivity : TauriActivity() {
             // Covers Jam keeps (CoverStore) answer the worker's image requests the network can't.
             if (src.offlineApp) runCatching {
                 val id = src.id
-                profile.serviceWorkerController.setServiceWorkerClient(object : androidx.webkit.ServiceWorkerClientCompat() {
+                profile.serviceWorkerController.setServiceWorkerClient(object : android.webkit.ServiceWorkerClient() {
                     override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = savedCover(id, request)
                 })
             }
