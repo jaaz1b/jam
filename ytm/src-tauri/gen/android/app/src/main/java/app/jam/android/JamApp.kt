@@ -10,6 +10,7 @@ class JamApp : Application() {
         // Only Jam's own process (a service in another process would need none of this).
         if (!isMainProcess()) return
         Prefs.init(this)
+        CoverStore.init(this)
         Discord.init(this)
     }
 

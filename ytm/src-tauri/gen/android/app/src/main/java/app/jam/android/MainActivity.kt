@@ -637,6 +637,13 @@ class MainActivity : TauriActivity() {
             val name = profileName(src.id)
             val profile = ProfileStore.getInstance().getOrCreateProfile(name)
             runCatching { profile.serviceWorkerController.serviceWorkerWebSettings.blockNetworkLoads = saved }
+            // Covers Jam keeps (CoverStore) answer the worker's image requests the network can't.
+            if (src.offlineApp) runCatching {
+                val id = src.id
+                profile.serviceWorkerController.setServiceWorkerClient(object : androidx.webkit.ServiceWorkerClientCompat() {
+                    override fun shouldInterceptRequest(request: WebResourceRequest): WebResourceResponse? = savedCover(id, request)
+                })
+            }
             WebViewCompat.setProfile(wv, name)
         }
         wv.setBackgroundColor(BG)
@@ -720,12 +727,31 @@ class MainActivity : TauriActivity() {
             val o = try { JSONObject(json) } catch (e: Exception) { return }
             appendOfflineLog(sourceId, o)
         }
+        /** Covers the site shows or refers to (installed-app.js), for CoverStore to keep. */
+        @JavascriptInterface fun coverUrls(json: String?): Int {
+            if (json == null || json.length > 4_000_000 || !Sources.exists(sourceId) || !Sources.byId(sourceId).offlineApp) return 0
+            val a = try { JSONArray(json) } catch (e: Exception) { return 0 }
+            val urls = (0 until a.length()).mapNotNull { a.optString(it).takeIf { u -> u.startsWith("https://") || u.startsWith("http://") } }
+            return CoverStore.want(urls)
+        }
         @JavascriptInterface fun offlineLogFor(id: String): String = Prefs.secret("offlinelog.$id") ?: "[]"
         @JavascriptInterface fun sources(): String =
             JSONArray(Sources.all().map { JSONObject().put("id", it.id).put("name", it.name).put("color", it.color) }).toString()
     }
 
     private fun savedMode(src: Source) = src.offlineApp && profilesSupported && SavedState.enabled(src.id)
+
+    /** A cover Jam kept, for an offline web app with no network (its saved state, or no internet). Any thread. */
+    private fun savedCover(id: String, request: WebResourceRequest): WebResourceResponse? {
+        // Cheapest first: this runs for every request the page and its worker make.
+        if (request.method != "GET") return null
+        val url = request.url.toString()
+        if (!url.startsWith("http") || CoverStore.file(url) == null) return null
+        if (!Sources.exists(id)) return null
+        val src = Sources.byId(id)
+        if (!src.offlineApp || (!savedMode(src) && online())) return null
+        return CoverStore.serve(url)
+    }
 
     /** Switch a source between its live site and its saved state: a new page in the other profile. */
     private fun setSavedMode(id: String, on: Boolean) {
@@ -765,11 +791,12 @@ class MainActivity : TauriActivity() {
         box.addView(row)
         val info = if (has) {
             val whenSaved = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(SavedState.savedAt(id)))
-            "Saved $whenSaved" + (if (SavedState.size(id) > 0) " · ${formatSize(SavedState.size(id))} of pages" else "")
+            "Saved $whenSaved" + (if (SavedState.size(id) > 0) " · ${formatSize(SavedState.size(id))} of pages" else "") +
+                (if (CoverStore.count() > 0) " · ${CoverStore.count()} covers (${formatSize(CoverStore.size())})" else "")
         } else "No saved state yet."
         box.addView(text(info, 13f, 0xFF9B9BAB.toInt(), dp(16)))
         SavedState.lastError(id)?.let { box.addView(text("Last save failed: $it", 13f, 0xFFF87171.toInt(), dp(6))) }
-        box.addView(text("Saving keeps ${src.name}'s pages as they are now, so it opens with no internet and plays your downloaded songs. The songs themselves aren't copied, so a save takes only a few MB.", 13f, 0xFF9B9BAB.toInt(), dp(12)))
+        box.addView(text("Saving keeps ${src.name}'s pages as they are now, so it opens with no internet and plays your downloaded songs. The songs themselves aren't copied, so a save takes only a few MB, plus the songs' covers.", 13f, 0xFF9B9BAB.toInt(), dp(12)))
 
         val dialog = android.app.AlertDialog.Builder(ctx)
             .setTitle("${src.name}: saved state")
@@ -840,7 +867,9 @@ class MainActivity : TauriActivity() {
             SavedState.recordSave(id, o.optInt("count"), o.optLong("bytes"))
             discard(id)
             if (active == id) { active = null; switchSource(id) } else renderChips()
-            Toast.makeText(this, "Saved ${o.optInt("count")} pages and files (${formatSize(o.optLong("bytes"))}). $name now opens your saved state.", Toast.LENGTH_LONG).show()
+            val covers = o.optInt("covers")
+            Toast.makeText(this, "Saved ${o.optInt("count")} pages and files (${formatSize(o.optLong("bytes"))})" +
+                (if (covers > 0) ", plus $covers covers saving in the background" else "") + ". $name now opens your saved state.", Toast.LENGTH_LONG).show()
         } else {
             val err = o.optString("error").ifEmpty { "unknown error" }
             SavedState.recordError(id, err)
@@ -913,6 +942,9 @@ class MainActivity : TauriActivity() {
                 else -> return true
             }
         }
+
+        override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? =
+            savedCover(sourceId, request)
 
         override fun onPageStarted(view: WebView, url: String?, favicon: Bitmap?) {
             fallbackScript?.let { view.evaluateJavascript(it, null) }

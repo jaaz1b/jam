@@ -12,5 +12,13 @@
   writes it back over the caches when the saved state opens. Expose `JamNative.savedStateDone` in
   `preload.js`; Save no longer relaunches Jam. On first start, delete `Partitions/jam-octave-saved`.
 
+- **Saved state: covers.** Android 2.4.1: downloaded songs showed no art in the saved state
+  (Octave's worker keeps only its last ~400 images, none opaque/cross-origin that it can't read).
+  Android's `CoverStore.kt` keeps covers itself: `installed-app.js` reports image URLs the site
+  loads (PerformanceObserver + `document.images`) and, on save, every image URL in the saved
+  pages and in Octave's IndexedDB records (`JamNative.coverUrls`); Jam downloads each once and
+  answers image requests from its folder when the network is blocked (saved state) or down. On
+  desktop: `session.protocol.handle('https', …)` or `webRequest` redirect in the saved session.
+
 Already in 3.1 (shipped on Android first): YouTube Music downloads and offline library, Octave
 offline, the Octave saved-state switch (title-bar save button).

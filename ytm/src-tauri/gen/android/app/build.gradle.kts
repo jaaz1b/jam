@@ -28,7 +28,7 @@ android {
         minSdk = 26
         targetSdk = 36
         versionCode = (System.getenv("GITHUB_RUN_NUMBER") ?: tauriProperties.getProperty("tauri.android.versionCode", "1")).toInt() + 100
-        versionName = "2.4.0"
+        versionName = "2.4.1"
     }
     signingConfigs {
         create("release") {

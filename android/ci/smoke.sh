@@ -191,7 +191,7 @@ PY
 
 # Saved state (the save button for web apps that work offline): save the test site, then check it
 # opens from the save without asking the server for anything, and that the switch goes back live.
-python3 -m http.server 8000 --directory "$(dirname "$0")" </dev/null >/dev/null 2>"$OUT/server.log" &
+python3 "$(dirname "$0")/serve.py" 8000 </dev/null >/dev/null 2>"$OUT/server.log" &
 SERVER=$!
 adb reverse tcp:8000 tcp:8000 >/dev/null
 adb shell am force-stop "$PKG"
@@ -206,7 +206,7 @@ if tap "Saved state"; then
   shot "$(printf %02d $n)-saved-reopened"; n=$((n+1))
   AFTER=$(grep -c 'GET /offline-pwa' "$OUT/server.log")
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-saved.xml" >/dev/null 2>&1
-  summary "Saved state: requests to the site while it was open: $((AFTER - BEFORE)); page says: $(grep -oE 'Served with the service worker[^"]*' "$OUT/ui-saved.xml" | head -1); chip: $(grep -oE 'Offline test · Saved' "$OUT/ui-saved.xml" | head -1)"
+  summary "Saved state: requests to the site while it was open: $((AFTER - BEFORE)); page says: $(grep -oE 'Served with the service worker[^"]*' "$OUT/ui-saved.xml" | head -1); chip: $(grep -oE 'Offline test · Saved' "$OUT/ui-saved.xml" | head -1); $(grep -oE 'Cover: [a-z]+' "$OUT/ui-saved.xml" | head -1) (kept by Jam: $(adb shell "ls /data/data/$PKG/files/covers 2>/dev/null | wc -l" | tr -d '\r'))"
   # Back to the live site with the switch.
   tap "Saved state, on" && sleep 2 && tap "Open my saved state" last && sleep 12
   shot "$(printf %02d $n)-saved-switched-live"; n=$((n+1))

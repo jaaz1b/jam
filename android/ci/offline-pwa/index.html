@@ -6,6 +6,7 @@
 <p>Used by Jam's automated Android test. A service worker keeps this page, as Octave's does; the
 test stops the server and reopens Jam.</p>
 <p id="s" style="font-size:24px">…</p>
+<p><img id="cover" src="covers/cover.png" crossorigin="anonymous" width="64" height="64" alt=""> <span id="c" style="font-size:24px">Cover: …</span></p>
 <script>
   const s = document.getElementById('s');
   const show = () => {
@@ -16,6 +17,10 @@ test stops the server and reopens Jam.</p>
   else s.textContent = 'This WebView has no service workers';
   navigator.serviceWorker && navigator.serviceWorker.addEventListener('controllerchange', show);
   show();
+  const img = document.getElementById('cover'), c = document.getElementById('c');
+  const cover = () => { c.textContent = img.complete && img.naturalWidth ? 'Cover: shown' : 'Cover: missing'; };
+  img.addEventListener('load', cover); img.addEventListener('error', cover);
+  if (img.complete) cover();
 </script>
 </body>
 </html>

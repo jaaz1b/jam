@@ -221,6 +221,10 @@ class PlaybackService : Service() {
             if (file != null) {
                 bmp = try { java.io.File(file).takeIf { it.isFile }?.readBytes()?.let { decode(it) } } catch (e: Exception) { null }
             }
+            // A web app's cover Jam kept (CoverStore): works in a saved state and offline.
+            if (bmp == null && url != null) {
+                bmp = try { CoverStore.file(url)?.readBytes()?.let { decode(it) } } catch (e: Exception) { null }
+            }
             if (bmp == null && url != null) {
                 bmp = try {
                     http.newCall(Request.Builder().url(url).build()).execute().use { r ->

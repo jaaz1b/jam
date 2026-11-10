@@ -145,6 +145,90 @@
   // copied: the downloaded songs stay where the site keeps them, and the saved state plays them
   // from there. In saved mode (no network), the saved pages are written back over the site's caches
   // once, so it opens exactly as saved even if the live site has changed since.
+  // --- Covers (Jam's CoverStore.kt) ----------------------------------------------------------
+  //
+  // The site's worker keeps only its last few hundred images, so Jam keeps the covers itself: it is
+  // told which ones the site shows (and, when saving, every one its saved pages and downloads refer
+  // to), downloads each once, and answers for them whenever there's no network.
+  var IMG = /\.(?:jpe?g|png|webp|avif|gif)(?:[?#]|$)|dzcdn\.net\/images\/|\/api\/img\?|\/_next\/image\?|mzstatic\.com\/image\/|resources\.tidal\.com\/images\//i;
+  var URLS = /https?:\/\/[^\s"'<>()\\`]+/g;
+  var coverSeen = {}, coverQueue = [];
+  function wantCover(u) {
+    if (!u || typeof u !== 'string' || u.length > 1500 || coverSeen[u]) return;
+    if (!/^https?:/.test(u) || /^blob:|^data:/.test(u) || !IMG.test(u)) return;
+    coverSeen[u] = 1;
+    coverQueue.push(u);
+  }
+  function sendCovers() {
+    var n = 0;
+    while (coverQueue.length && J && J.coverUrls) {
+      try { n += J.coverUrls(JSON.stringify(coverQueue.splice(0, 2000))) || 0; } catch (e) { break; }
+    }
+    return n;
+  }
+  function coversInText(t) {
+    if (!t || t.length > 20 * 1024 * 1024) return;
+    t = t.replace(/\\u002F/gi, '/').replace(/\\\//g, '/');
+    var m = t.match(URLS);
+    if (m) m.forEach(function (u) { wantCover(u.replace(/[.,;]+$/, '').replace(/&amp;/g, '&')); });
+  }
+  function coversOnPage() {
+    try {
+      var imgs = document.images;
+      for (var i = 0; i < imgs.length; i++) wantCover(imgs[i].currentSrc || imgs[i].src);
+      var srcs = document.querySelectorAll('source[srcset], img[srcset]');
+      for (var k = 0; k < srcs.length; k++) coversInText(srcs[k].getAttribute('srcset'));
+    } catch (e) {}
+  }
+  // The site's own databases (its downloads list, its library): the covers its records refer to.
+  async function coversInDatabases(deadline) {
+    if (!indexedDB.databases) return;
+    var dbs = await indexedDB.databases();
+    for (var d = 0; d < dbs.length && Date.now() < deadline; d++) {
+      var name = dbs[d].name;
+      if (!name || name === SNAP) continue;
+      var db = await new Promise(function (ok) {
+        var r = indexedDB.open(name);
+        r.onsuccess = function () { ok(r.result); };
+        r.onerror = r.onblocked = function () { ok(null); };
+        r.onupgradeneeded = function () { try { r.transaction.abort(); } catch (e) {} };
+      });
+      if (!db) continue;
+      try {
+        var stores = Array.prototype.slice.call(db.objectStoreNames);
+        for (var s = 0; s < stores.length && Date.now() < deadline; s++) {
+          await new Promise(function (ok) {
+            var seen = 0;
+            var r = db.transaction(stores[s]).objectStore(stores[s]).openCursor();
+            r.onsuccess = function () {
+              var c = r.result;
+              if (!c || ++seen > 50000 || Date.now() > deadline) return ok();
+              walk(c.value, 0);
+              c.continue();
+            };
+            r.onerror = function () { ok(); };
+          });
+        }
+      } catch (e) {} finally { db.close(); }
+    }
+    function walk(v, depth) {
+      if (v == null || depth > 6) return;
+      if (typeof v === 'string') { if (v.length < 1500) { if (IMG.test(v)) wantCover(v); } else if (v.length < 200000) coversInText(v); return; }
+      if (typeof v !== 'object' || v instanceof Blob || v instanceof ArrayBuffer || ArrayBuffer.isView(v)) return;
+      if (Array.isArray(v)) { for (var i = 0; i < v.length && i < 5000; i++) walk(v[i], depth + 1); return; }
+      for (var k in v) { try { walk(v[k], depth + 1); } catch (e) {} }
+    }
+  }
+  if (!saved) {
+    try { performance.setResourceTimingBufferSize(5000); } catch (e) {}
+    try {
+      new PerformanceObserver(function (list) {
+        list.getEntries().forEach(function (e) { wantCover(e.name); });
+      }).observe({ type: 'resource', buffered: true });
+    } catch (e) {}
+    setInterval(function () { coversOnPage(); sendCovers(); }, 8000);
+  }
+
   var SNAP = 'jam-saved-state';
   var MARK = 'jam-saved-applied';
   var MAX_ENTRY = 8 * 1024 * 1024;
@@ -188,9 +272,14 @@
           req.headers.forEach(function (v, k) { qh.push([k, v]); });
           entries.push({ cache: names[i], url: req.url, reqHeaders: qh, status: res.status, statusText: res.statusText, headers: rh, body: body });
           bytes += body.size;
+          wantCover(req.url);
+          if (/html|x-component|json|text\/plain/i.test(type)) { try { coversInText(await body.text()); } catch (e) {} }
         }
       }
       if (!entries.length) throw new Error('the site has no saved pages yet. Open it with internet first');
+      coversOnPage();
+      try { await coversInDatabases(Date.now() + 20000); } catch (e) { log('covers-db-failed', e && (e.message || e.name) || e); }
+      var covers = sendCovers();
       var gen = Date.now();
       var db = await snapDb();
       var tx = db.transaction(['entries', 'meta'], 'readwrite');
@@ -200,8 +289,8 @@
       await done(tx);
       db.close();
       try { localStorage.removeItem(MARK); } catch (e) {}
-      log('saved-state', entries.length + ' entries, ' + bytes + ' bytes, ' + skipped + ' skipped');
-      reply({ ok: true, gen: gen, count: entries.length, bytes: bytes });
+      log('saved-state', entries.length + ' entries, ' + bytes + ' bytes, ' + skipped + ' skipped, ' + covers + ' new covers of ' + Object.keys(coverSeen).length);
+      reply({ ok: true, gen: gen, count: entries.length, bytes: bytes, covers: covers });
     })().catch(function (e) {
       log('saved-state-failed', e && (e.message || e.name) || e);
       reply({ ok: false, error: String(e && (e.message || e)) });
