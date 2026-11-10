@@ -1,0 +1,47 @@
+# Jam for Arch Linux, from the prebuilt release (the same files as jam-<version>-x86_64.pacman).
+# CI fills in @VERSION@, @TAG@ and @SHA256@ and attaches the result to each Linux release as
+# PKGBUILD:  download it into an empty folder, then  makepkg -si
+pkgname=jam-bin
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc='Music terminal with Discord presence: Octave, Monochrome, Spotify, Apple Music and YouTube Music in one window'
+arch=('x86_64')
+url='https://github.com/jaaz1b/jam'
+license=('GPL-3.0-or-later')
+# castLabs Electron (Widevine, for Spotify / Apple Music) + the YouTube Music engine (a hidden
+# WebKitGTK window, libmpv for playback).
+depends=('gtk3' 'nss' 'alsa-lib' 'libxss' 'libxtst' 'libdrm' 'mesa' 'at-spi2-core' 'libcups' 'libsecret'
+         'xdg-utils' 'mpv' 'webkit2gtk-4.1' 'libsoup3' 'openssl' 'dbus')
+optdepends=('discord: song on your Discord profile')
+provides=('jam')
+conflicts=('jam')
+options=('!strip' '!debug')
+source=("Jam-${pkgver}-linux-x64.tar.gz::https://github.com/jaaz1b/jam/releases/download/@TAG@/Jam-${pkgver}-linux-x64.tar.gz")
+sha256sums=('@SHA256@')
+
+package() {
+  install -d "$pkgdir/opt/jam"
+  cp -a "$srcdir/Jam-${pkgver}-linux-x64/." "$pkgdir/opt/jam/"
+  # Chromium's sandbox helper: user namespaces (Arch's kernel has them) make the setuid bit unneeded.
+  chmod 0755 "$pkgdir/opt/jam/chrome-sandbox"
+  install -d "$pkgdir/usr/bin"
+  ln -s /opt/jam/jam "$pkgdir/usr/bin/jam"
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/jam.desktop" <<'EOF'
+[Desktop Entry]
+Name=Jam
+GenericName=Music player
+Comment=Octave, Monochrome, Spotify, Apple Music and YouTube Music in one window, with your song on your Discord profile
+Exec=/usr/bin/jam %U
+Icon=jam
+Terminal=false
+Type=Application
+StartupWMClass=Jam
+Categories=AudioVideo;Audio;Player;
+Keywords=music;youtube;spotify;discord;
+EOF
+  for s in 16 32 48 64 128 256 512; do
+    install -Dm644 "$srcdir/Jam-${pkgver}-linux-x64/resources/icons/${s}x${s}.png" \
+      "$pkgdir/usr/share/icons/hicolor/${s}x${s}/apps/jam.png"
+  done
+  install -Dm644 "$srcdir/Jam-${pkgver}-linux-x64/resources/ytm/LICENSE.txt" "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

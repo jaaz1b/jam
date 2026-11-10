@@ -156,8 +156,18 @@ npm install
 npm start            # run it
 npm run dist:win     # Windows installer + portable  -> dist/
 npm run dist:mac     # macOS .dmg (build this on a Mac)
-npm run dist:linux   # Linux AppImage
+npm run dist:linux   # Linux: Arch package (.pacman) + tar.gz
 ```
+
+### Linux (Arch)
+
+Each push builds `jam-<version>-x86_64.pacman`, `Jam-<version>-linux-x64.tar.gz` and a `PKGBUILD`
+(jam-bin) into a `linux-v<version>-build.<n>` release (`.github/workflows/linux.yml`), then installs
+and tests the package on Arch itself. Install with `sudo pacman -U jam-<version>-x86_64.pacman`, or
+put the `PKGBUILD` in an empty folder and run `makepkg -si`. YouTube Music needs `mpv` (libmpv) and
+`webkit2gtk-4.1`, which pacman installs as dependencies. Building it yourself needs the castLabs
+Electron for Linux in `../.ecs/linux` (`npx electron-builder --linux -c.electronDist=../.ecs/linux`)
+and the engine in `../ytm-dist` (see the workflow).
 
 Settings are stored in `%APPDATA%\Jam\settings.json` (Windows), `~/Library/Application Support/Jam`
 (macOS), or `~/.config/Jam` (Linux). On first launch, Jam copies settings and your login over from the

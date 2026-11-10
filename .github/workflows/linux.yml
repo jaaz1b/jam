@@ -1,0 +1,244 @@
+# Builds Jam for Linux (packaged for Arch): the YouTube Music engine (ytm/, Rust + Tauri, based on
+# Limusic) and the Jam desktop app (desktop/, castLabs Electron), the same app as on Windows.
+#
+# Outputs, attached to a prerelease `linux-v<version>-build.<n>`:
+#   jam-<version>-x86_64.pacman   install with:  sudo pacman -U jam-<version>-x86_64.pacman
+#   Jam-<version>-linux-x64.tar.gz  the app folder, runs anywhere with the libraries below
+#   PKGBUILD                       jam-bin, from the tar.gz:  makepkg -si
+# The engine uses the system's libmpv (Arch: mpv) and WebKitGTK 4.1 (webkit2gtk-4.1).
+#
+# Then, on Arch itself (archlinux container): the package is installed with pacman (its
+# dependencies from the Arch repos), the PKGBUILD is built with makepkg, and the installed app is
+# tested: the saved-state test (desktop/test/saved-state.mjs) and the YouTube Music engine test
+# (desktop/test/ytm-engine.mjs). Their results are attached to the release (arch-test.txt).
+
+name: Linux build
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'desktop/**'
+      - 'ytm/**'
+      - '!ytm/src-tauri/gen/android/**'
+      - 'linux/**'
+      - 'android/ci/offline-pwa/**'
+      - 'android/ci/serve.py'
+      - '.github/workflows/linux.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: linux-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # castLabs Electron for Content Security (Widevine, for Spotify / Apple Music), Linux x64.
+  ECS_URL: https://github.com/castlabs/electron-releases/releases/download/v45.2.1%2Bwvcus/electron-v45.2.1%2Bwvcus-linux-x64.zip
+  ECS_SHA256: 18953cdab1cdc2499f9b0089f85d069559bf992145008a40aacd0d7714b97960
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 75
+    outputs:
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - name: System libraries (WebKitGTK, libmpv) and packaging tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libsoup-3.0-dev libssl-dev libxdo-dev librsvg2-dev \
+            libayatana-appindicator3-dev libmpv-dev libarchive-tools zstd
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ytm/ui/pnpm-lock.yaml
+
+      # ---------------------------------------------------------------- YouTube Music engine (ytm/)
+
+      - name: Engine UI (Svelte)
+        run: cd ytm/ui && pnpm install --frozen-lockfile && pnpm build
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: ytm -> target
+          key: linux
+
+      - name: Tauri CLI
+        run: npm install -g "@tauri-apps/cli@2.11.5"
+
+      - name: Player-cipher registry snapshot
+        run: |
+          for url in https://raw.githubusercontent.com/MetrolistGroup/faraday/master/registry/player_configs.json \
+                     https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json; do
+            if curl -fsSL --max-time 30 "$url" -o /tmp/pc.json && jq -e '(.players | objects | length) > 0' /tmp/pc.json >/dev/null 2>&1; then
+              cp /tmp/pc.json ytm/src-tauri/cipher_configs.json; echo "bundled from $url"; exit 0
+            fi
+          done
+          echo "::warning::no player-cipher registry reachable; the engine fetches it at runtime"
+
+      - name: Last.fm API keys (optional)
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
+        run: |
+          if [ -n "$LASTFM_API_KEY" ] && [ -n "$LASTFM_API_SECRET" ]; then
+            printf 'LIMUSIC_LASTFM_API_KEY=%s\nLIMUSIC_LASTFM_API_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_API_SECRET" > ytm/src-tauri/lastfm.keys
+          fi
+
+      - name: Build the engine
+        run: |
+          set -euo pipefail
+          cd ytm
+          tauri build --no-bundle --config '{"build":{"beforeBuildCommand":""}}'
+          ls -la target/release/jam-ytm
+
+      - name: Stage the engine for Jam
+        run: |
+          set -euo pipefail
+          mkdir -p ytm-dist
+          cp ytm/target/release/jam-ytm ytm-dist/
+          strip ytm-dist/jam-ytm
+          cp -r ytm/ui/build ytm-dist/ui
+          cp LICENSE ytm-dist/LICENSE.txt
+          echo "engine links:"; readelf -d ytm-dist/jam-ytm | grep NEEDED
+          ls -la ytm-dist
+
+      # ---------------------------------------------------------------- Jam desktop app (desktop/)
+
+      - name: castLabs Electron (Widevine)
+        run: |
+          set -euo pipefail
+          mkdir -p .ecs
+          curl -fsSL -o .ecs/ecs.zip "$ECS_URL"
+          echo "$ECS_SHA256  .ecs/ecs.zip" | sha256sum -c -
+          unzip -q .ecs/ecs.zip -d .ecs/linux
+          test -x .ecs/linux/electron
+
+      - name: Build Jam (pacman package + tar.gz)
+        run: |
+          set -euo pipefail
+          cd desktop
+          npm ci --ignore-scripts
+          npx electron-builder --linux --x64 --publish never -c.electronDist=../.ecs/linux
+          ls -la dist
+
+      - name: PKGBUILD (jam-bin)
+        run: |
+          set -euo pipefail
+          VERSION="$(jq -r .version desktop/package.json)"
+          TAG="linux-v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          SHA="$(sha256sum "desktop/dist/Jam-${VERSION}-linux-x64.tar.gz" | cut -d' ' -f1)"
+          sed -e "s/@VERSION@/${VERSION}/g" -e "s/@TAG@/${TAG}/g" -e "s/@SHA256@/${SHA}/g" linux/arch/PKGBUILD.in > desktop/dist/PKGBUILD
+          cat desktop/dist/PKGBUILD | head -20
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: jam-linux
+          path: |
+            desktop/dist/*.pacman
+            desktop/dist/*.tar.gz
+            desktop/dist/PKGBUILD
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Publish as a release
+        id: release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="$(jq -r .version desktop/package.json)"
+          TAG="linux-v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          gh release create "$TAG" desktop/dist/*.pacman desktop/dist/*.tar.gz desktop/dist/PKGBUILD \
+            --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Jam for Linux ${VERSION} (build ${GITHUB_RUN_NUMBER})" \
+            --notes "Automatic build of ${GITHUB_SHA::7}. Arch: \`sudo pacman -U jam-${VERSION}-x86_64.pacman\`, or download PKGBUILD and run \`makepkg -si\`. Other distributions: unpack the tar.gz and run \`./jam\` (needs libmpv and WebKitGTK 4.1)."
+
+  # ---------------------------------------------------------------- on Arch itself
+
+  arch-test:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    container:
+      image: archlinux:latest
+      options: --shm-size=2g
+    steps:
+      - name: Arch packages for the test
+        run: |
+          pacman -Syu --noconfirm --needed git base-devel nodejs npm python xorg-server-xvfb xorg-xauth dbus ttf-dejavu jq
+
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: jam-linux
+          path: dist
+
+      - name: Install the package with pacman
+        run: |
+          set -euo pipefail
+          ls -la dist
+          pacman -U --noconfirm dist/jam-*-x86_64.pacman
+          pacman -Qi jam | tee arch-test.txt
+          ls -la /opt/Jam /usr/bin/jam
+          echo "--- engine libraries on Arch:" | tee -a arch-test.txt
+          ldd /opt/Jam/resources/ytm/jam-ytm | grep -E "not found|mpv|webkit|soup" | tee -a arch-test.txt
+          if ldd /opt/Jam/resources/ytm/jam-ytm /opt/Jam/jam | grep "not found"; then echo "::error::missing libraries"; exit 1; fi
+
+      - name: Build the PKGBUILD (jam-bin) with makepkg
+        run: |
+          set -euo pipefail
+          useradd -m builder
+          mkdir -p /home/builder/jam-bin
+          cp dist/PKGBUILD dist/*.tar.gz /home/builder/jam-bin/
+          chown -R builder /home/builder/jam-bin
+          cd /home/builder/jam-bin
+          su builder -c 'makepkg --nodeps --noconfirm'
+          echo "--- makepkg (jam-bin):" | tee -a "$GITHUB_WORKSPACE/arch-test.txt"
+          ls -la *.pkg.tar.* | tee -a "$GITHUB_WORKSPACE/arch-test.txt"
+          bsdtar -tf jam-bin-*.pkg.tar.* | grep -E "usr/bin/jam|jam.desktop|opt/jam/jam$|512x512" | tee -a "$GITHUB_WORKSPACE/arch-test.txt"
+
+      - name: Test the installed app
+        run: |
+          set -uo pipefail
+          mkdir -p /tmp/t && (cd /tmp/t && npm init -y >/dev/null && npm i --silent puppeteer-core@24)
+          export PUPPETEER=/tmp/t/node_modules/puppeteer-core JAM_PACKAGED=/opt/Jam/jam JAM_TEST_OUT="$GITHUB_WORKSPACE"
+          echo "--- saved state (Octave → the offline test site):" | tee -a arch-test.txt
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" node desktop/test/saved-state.mjs 2>&1 | grep -v "^home:\|electron log" | tee -a arch-test.txt
+          echo "--- YouTube Music engine:" | tee -a arch-test.txt
+          dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" node desktop/test/ytm-engine.mjs 2>&1 | tee -a arch-test.txt
+          ENGINE=${PIPESTATUS[0]}
+          grep -q "saved: requests to the site while open: 0" arch-test.txt || { echo "::error::saved state reached the site"; exit 1; }
+          grep -q "saved: Cover: shown" arch-test.txt || { echo "::error::saved state: no cover"; exit 1; }
+          exit $ENGINE
+
+      - name: Attach the results to the release
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          pacman -S --noconfirm --needed github-cli >/dev/null 2>&1 || true
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          [ -f ytm.png ] && cp ytm.png arch-test-ytm.png
+          gh release upload "${{ needs.build.outputs.tag }}" arch-test.txt $( [ -f arch-test-ytm.png ] && echo arch-test-ytm.png ) --repo "$GITHUB_REPOSITORY" --clobber || true

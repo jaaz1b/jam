@@ -16,6 +16,8 @@ on:
       - 'android/**'
       - 'ytm/src-tauri/gen/android/**'
       - '.github/workflows/android.yml'
+      - 'linux/**'
+      - '.github/workflows/linux.yml'
   workflow_dispatch:
 
 permissions:

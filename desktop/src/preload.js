@@ -27,6 +27,10 @@ if (offlineApp) {
     offlineStatus: (json) => { if (typeof json === 'string' && json.length < 8000) ipcRenderer.send('offline:status', json); },
     offlineLog: (json) => { if (typeof json === 'string' && json.length < 1000) ipcRenderer.send('offline:log', json); },
     savedMode: () => saved,
+    // The saved state the page made (installed-app.js `__jamSaveState`), and the covers it shows or
+    // refers to (main.js, covers.js): answered with how many of those are new.
+    savedStateDone: (json) => { if (typeof json === 'string' && json.length < 8000) ipcRenderer.send('saved:done', json); },
+    coverUrls: (json) => (typeof json === 'string' && json.length < 4000000 ? ipcRenderer.sendSync('covers:want', json) : 0),
   });
 }
 

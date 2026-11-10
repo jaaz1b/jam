@@ -1,10 +1,12 @@
 {
   "name": "octave-desktop",
   "productName": "Jam",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Jam",
   "main": "src/main.js",
   "author": "Jam",
+  "homepage": "https://github.com/jaaz1b/jam",
+  "desktopName": "jam.desktop",
   "license": "GPL-3.0-or-later",
   "scripts": {
     "start": "electron .",
@@ -62,9 +64,43 @@
       "category": "public.app-category.music"
     },
     "linux": {
-      "target": "AppImage",
-      "icon": "build/icon.png",
-      "category": "Audio"
+      "target": [
+        {
+          "target": "pacman",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "tar.gz",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "build/icons",
+      "category": "AudioVideo;Audio;Player",
+      "executableName": "jam",
+      "artifactName": "Jam-${version}-linux-x64.${ext}",
+      "synopsis": "Music terminal with Discord presence",
+      "description": "Octave, Monochrome, Spotify, Apple Music and YouTube Music in one window, with your song on your Discord profile.",
+      "maintainer": "Jam",
+      "vendor": "Jam",
+      "desktop": {
+        "entry": {
+          "Name": "Jam",
+          "GenericName": "Music player",
+          "StartupWMClass": "Jam",
+          "Keywords": "music;youtube;spotify;discord;"
+        }
+      },
+      "syncDesktopName": true,
+      "extraResources": [
+        {
+          "from": "build/icons",
+          "to": "icons"
+        }
+      ]
     },
     "publish": null,
     "electronVersion": "45.2.1",
@@ -78,7 +114,29 @@
         "from": "../ytm-dist",
         "to": "ytm"
       }
-    ]
+    ],
+    "pacman": {
+      "artifactName": "jam-${version}-x86_64.pacman",
+      "packageName": "jam",
+      "depends": [
+        "gtk3",
+        "nss",
+        "alsa-lib",
+        "libxss",
+        "libxtst",
+        "libdrm",
+        "mesa",
+        "at-spi2-core",
+        "libcups",
+        "libsecret",
+        "xdg-utils",
+        "mpv",
+        "webkit2gtk-4.1",
+        "libsoup3",
+        "openssl",
+        "dbus"
+      ]
+    }
   },
   "dependencies": {
     "ws": "^8.22.1"

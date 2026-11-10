@@ -12,6 +12,7 @@ const presence = require('./presence');
 const sources = require('./sources');
 const { Engine, locate: locateEngine } = require('./engine');
 const savedstate = require('./savedstate');
+const covers = require('./covers');
 // The preload for sites that work offline: preload.js plus installed-app.js, run in the page's own
 // world before the site's scripts (executeInMainWorld takes a function, so it is written out as one).
 let offlinePreloadPath = null;
@@ -75,16 +76,16 @@ app.userAgentFallback = app.userAgentFallback
   .replace(/\s?Electron\/[\d.]+(\+\w+)?/i, '')
   .replace(new RegExp(`\\s?${app.getName()}\\/[\\d.]+`, 'i'), '');
 
-// A saved state asked for before Jam relaunched (savedstate.js): made now, before any session
-// opens the site's data.
-let justSaved = null;
+// Jam 3.1's saved states were copies of whole sessions (downloads included): deleted at start,
+// before any session opens them (savedstate.js).
+let freedOld = 0;
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
   try {
     sources.refresh(settings.all());
-    justSaved = savedstate.applyPending(app.getPath('userData'), byId);
+    freedOld = savedstate.cleanUp(app.getPath('userData'));
   } catch (e) { console.warn('saved states:', e); }
   app.on('second-instance', () => showMain());
   app.whenReady().then(init);
@@ -194,17 +195,34 @@ const activeSource = () => byId(activeId || settings.get('defaultSource'));
 const preparedSessions = new Set();
 // A source opens its saved state instead of the live site (savedstate.js).
 const savedMode = (src) => !!src.offlineApp && savedstate.enabled(src.id);
-function sessionFor(src, saved = false) {
-  const ses = saved ? session.fromPartition(savedstate.savedPartition(src.id))
-    : src.partition ? session.fromPartition(src.partition) : session.defaultSession;
+
+// The saved state is the site's own session with the network blocked: its offline worker answers
+// for the pages (written back from the save by installed-app.js), its downloads play from where it
+// keeps them, and Jam answers for the covers it kept (covers.js). Nothing reaches the internet.
+const blockedSessions = new Set();
+function blockSession(ses, on) {
+  if (on === blockedSessions.has(ses)) return;
+  const schemes = ['http', 'https'];
+  if (on) {
+    blockedSessions.add(ses);
+    try { ses.enableNetworkEmulation({ offline: true }); } catch {}
+    ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] },
+      (d, cb) => cb({ cancel: !(d.method === 'GET' && covers.file(d.url)) }));
+    for (const sc of schemes) {
+      try { if (!ses.protocol.isProtocolHandled(sc)) ses.protocol.handle(sc, (req) => covers.serve(req.url) || Response.error()); } catch (e) { console.warn('saved state:', e.message); }
+    }
+  } else {
+    blockedSessions.delete(ses);
+    try { ses.disableNetworkEmulation(); } catch {}
+    ses.webRequest.onBeforeRequest(null);
+    for (const sc of schemes) { try { if (ses.protocol.isProtocolHandled(sc)) ses.protocol.unhandle(sc); } catch {} }
+  }
+}
+
+function sessionFor(src) {
+  const ses = src.partition ? session.fromPartition(src.partition) : session.defaultSession;
   if (!preparedSessions.has(ses)) {
     preparedSessions.add(ses);
-    if (saved) {
-      // The saved state never touches the network: the site's offline worker answers everything,
-      // exactly as with no internet.
-      try { ses.enableNetworkEmulation({ offline: true }); } catch {}
-      ses.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (_d, cb) => cb({ cancel: true }));
-    }
     // Grant what a music site needs (incl. protected playback); deny the rest.
     const ALLOWED = new Set(['media', 'mediaKeySystem', 'notifications', 'fullscreen', 'clipboard-sanitized-write', 'speaker-selection']);
     ses.setPermissionRequestHandler((_wc, perm, cb) => cb(ALLOWED.has(perm)));
@@ -226,9 +244,10 @@ function createView(id) {
   const saved = savedMode(src);
   const entry = { id: src.id, src, saved, view: null, discardTimer: null, httpError: null, waitingDrm: false, reduceMotionKey: null };
   const extra = src.offlineApp ? ['--jam-offline-app=1', ...(saved ? ['--jam-saved=1'] : [])] : [];
+  if (src.offlineApp) blockSession(sessionFor(src), saved);
   entry.view = new WebContentsView({
     webPreferences: {
-      session: sessionFor(src, saved),
+      session: sessionFor(src),
       preload: src.offlineApp ? offlinePreload() : path.join(__dirname, 'preload.js'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -285,12 +304,17 @@ function wireView(entry) {
         action: 'allow',
         overrideBrowserWindowOptions: {
           parent: mainWindow, width: 520, height: 720, autoHideMenuBar: true, icon: appIcon(), backgroundColor: BG,
-          webPreferences: { partition: (entry.saved ? savedstate.savedPartition(src.id) : src.partition) || undefined, contextIsolation: true, nodeIntegration: false, sandbox: true },
+          webPreferences: { partition: src.partition || undefined, contextIsolation: true, nodeIntegration: false, sandbox: true },
         },
       };
     }
     if (isHttp(url) || url.startsWith('mailto:')) shell.openExternal(url);
     return { action: 'deny' };
+  });
+
+  // A save asked for while the saved state was open runs once the live site has loaded.
+  wc.on('did-finish-load', () => {
+    if (pendingSave === entry.id && !entry.saved && isHttp(wc.getURL())) setTimeout(() => runSave(entry), 1500);
   });
 
   wc.on('dom-ready', () => {
@@ -862,7 +886,7 @@ ipcMain.on('titlebar:action', (_e, name, arg) => {
     }
     case 'saved-on': setSavedMode(activeSource().id, true); return;
     // Automated test only (desktop/test/saved-state.mjs): the same steps without the dialogs.
-    case 'test-save': if (process.env.JAM_TEST) { savedstate.requestSave(activeSource().id); app.relaunch(); quit(); } return;
+    case 'test-save': if (process.env.JAM_TEST) startSave(activeSource().id); return;
     case 'test-saved': if (process.env.JAM_TEST) setSavedMode(activeSource().id, !!arg); return;
     case 'zoom': mainWindow.isMaximized() ? mainWindow.unmaximize() : mainWindow.maximize(); return;
     case 'switcher': {
@@ -1292,8 +1316,8 @@ ipcMain.handle('app:offline-info', (_e, id) => {
 });
 ipcMain.handle('app:use-saved', (_e, id, on) => setSavedMode(String(id), !!on));
 
-/** Switch a source between its live site and its saved state: a new page in the other session. */
-function setSavedMode(id, on) {
+/** Switch a source between its live site and its saved state: a new page, with or without network. */
+function setSavedMode(id, on, quiet = false) {
   if (!sources.exists(id)) return;
   const src = byId(id);
   if (!src.offlineApp || (on && !savedstate.exists(id))) return;
@@ -1307,7 +1331,7 @@ function setSavedMode(id, on) {
   }
   if (activeId === id) { activeId = null; switchSource(id); }
   else sendTitlebarState();
-  flashNotice(on ? `${src.name}: your saved state, offline` : `${src.name}: the live site`, 'info');
+  if (!quiet) flashNotice(on ? `${src.name}: your saved state, offline` : `${src.name}: the live site`, 'info');
 }
 
 let flash = null;
@@ -1327,41 +1351,87 @@ async function confirmSave(src) {
   const again = savedstate.exists(src.id);
   const r = await dialog.showMessageBox(mainWindow, {
     type: 'question',
-    buttons: ['Save and restart', 'Cancel'],
+    buttons: ['Save', 'Cancel'],
     defaultId: 0,
     cancelId: 1,
     title: 'Save state',
     message: `Save ${src.name} as it is now?`,
     detail: (again ? 'This replaces your current saved state. ' : '') +
-      `Jam keeps everything ${src.name} has on this computer as it is now: its pages, your downloaded tracks and your login, and opens ${src.name} from the save from then on, with no internet. Download the tracks you want first.\n\nJam restarts to save (a few seconds). Music stops.`,
+      `Jam saves ${src.name}'s pages as they are now (your playlists, albums and library) and opens ${src.name} from the save from then on, with no internet. ` +
+      `Your downloaded songs aren't copied: the save plays them from where ${src.name} keeps them, so it takes only a few MB, plus the songs' covers. Download the songs you want first.`,
   });
-  if (r.response !== 0) return;
-  // The live site's page closes first so its data stops changing, and what it holds is written out.
-  const entry = views.get(src.id);
-  if (entry && !entry.view.webContents.isDestroyed()) entry.view.webContents.close();
-  const ses = sessionFor(src, false);
-  try { await ses.cookies.flushStore(); } catch {}
-  try { ses.flushStorageData(); } catch {}
-  await new Promise((res) => setTimeout(res, 1500));
-  savedstate.requestSave(src.id);
-  app.relaunch();
-  quit();
+  if (r.response === 0) startSave(src.id);
 }
+
+// The page makes the save (installed-app.js `__jamSaveState`), from the live site: if the saved
+// state is open, the live site opens first and the save runs once it has loaded.
+let pendingSave = null;
+function startSave(id) {
+  if (!sources.exists(id)) return;
+  const src = byId(id);
+  if (!src.offlineApp) return;
+  pendingSave = id;
+  const entry = views.get(id);
+  const wc = entry && !entry.view.webContents.isDestroyed() ? entry.view.webContents : null;
+  if (wc && !entry.saved && isHttp(wc.getURL()) && !wc.isLoading()) runSave(entry);
+  else if (savedMode(src)) setSavedMode(id, false, true);
+  else if (!entry) switchSource(id); // did-finish-load runs it
+  flashNotice(`Saving ${src.name}…`, 'info', 60000);
+}
+function runSave(entry) {
+  if (pendingSave !== entry.id || entry.view.webContents.isDestroyed()) return;
+  entry.view.webContents.executeJavaScript('typeof window.__jamSaveState === "function" ? (window.__jamSaveState(), true) : false')
+    .then((ok) => { if (!ok) savedDone(entry.id, { ok: false, error: "the page isn't ready. Open it with internet and try again" }); })
+    .catch((e) => savedDone(entry.id, { ok: false, error: e.message }));
+}
+function savedDone(id, o) {
+  if (pendingSave !== id) return;
+  pendingSave = null;
+  const src = byId(id);
+  if (!o || !o.ok) {
+    const why = (o && o.error) || 'unknown error';
+    savedstate.recordError(id, why);
+    flashNotice(`Couldn't save ${src.name}: ${why}`, 'error', 9000);
+    return;
+  }
+  savedstate.recordSave(id, o.gen, o.count || 0, o.bytes || 0);
+  setSavedMode(id, true, true);
+  flashNotice(`Saved ${o.count} pages and files (${formatSize(o.bytes || 0)})` +
+    (o.covers > 0 ? `, plus ${o.covers} covers in the background` : '') + `. ${src.name} now opens your saved state.`, 'info', 8000);
+}
+ipcMain.on('saved:done', (e, json) => {
+  const v = offlineSender(e);
+  if (!v) return;
+  let o = null;
+  try { o = JSON.parse(json); } catch {}
+  savedDone(v.id, o);
+});
+// Covers the page shows or refers to (installed-app.js): answered at once with how many are new.
+ipcMain.on('covers:want', (e, json) => {
+  e.returnValue = 0;
+  const v = offlineSender(e);
+  if (!v || typeof json !== 'string' || json.length > 4000000) return;
+  try { e.returnValue = covers.want(JSON.parse(json).filter((u) => typeof u === 'string' && /^https?:\/\//.test(u))); } catch {}
+});
 
 async function confirmDelete(src) {
   const r = await dialog.showMessageBox(mainWindow, {
     type: 'warning',
-    buttons: ['Delete and restart', 'Cancel'],
+    buttons: ['Delete', 'Cancel'],
     defaultId: 1,
     cancelId: 1,
     title: 'Delete saved state',
     message: `Delete ${src.name}'s saved state?`,
-    detail: `${src.name} will open the live site. The live site and its downloads aren't touched. Jam restarts for a moment.`,
+    detail: `${src.name} will open the live site. The live site and its downloads aren't touched.`,
   });
   if (r.response !== 0) return;
-  savedstate.requestDelete(src.id);
-  app.relaunch();
-  quit();
+  const entry = views.get(src.id);
+  if (entry && !entry.view.webContents.isDestroyed()) {
+    entry.view.webContents.executeJavaScript('window.__jamDeleteSavedState && window.__jamDeleteSavedState()').catch(() => {});
+  }
+  setSavedMode(src.id, false, true);
+  savedstate.forget(src.id);
+  sendTitlebarState();
 }
 
 function savedMenu(src, x) {
@@ -1370,8 +1440,9 @@ function savedMenu(src, x) {
   const when = has ? new Date(info.savedAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' }) : null;
   const items = [
     { label: 'Open my saved state (offline)', type: 'checkbox', checked: savedMode(src), enabled: has, click: (mi) => setSavedMode(src.id, mi.checked) },
-    { label: has ? `Saved ${when} · ${formatSize(info.size || 0)}` : 'No saved state yet', enabled: false },
+    { label: has ? `Saved ${when} · ${formatSize(info.size || 0)} of pages` : 'No saved state yet', enabled: false },
   ];
+  if (covers.count()) items.push({ label: `${covers.count()} covers kept (${formatSize(covers.size())})`, enabled: false });
   if (info && info.error) items.push({ label: `Last save failed: ${info.error}`.slice(0, 90), enabled: false });
   items.push({ type: 'separator' },
     { label: has ? 'Save again…' : 'Save current state…', click: () => confirmSave(src) });
@@ -1386,6 +1457,9 @@ ipcMain.handle('app:switch', (_e, id) => switchSource(String(id)));
 
 function init() {
   nativeTheme.themeSource = 'dark';
+  // Covers are downloaded through a session of their own, never one a saved state has blocked.
+  const coverSes = session.fromPartition('jam-covers');
+  covers.init(app.getPath('userData'), (url) => coverSes.fetch(url, { headers: { accept: 'image/avif,image/webp,image/*,*/*;q=0.8' } }));
   sources.refresh(settings.all());
   const s = settings.all();
   const first = byId(s.openLastSource ? s.lastSource : s.defaultSource);
@@ -1397,11 +1471,8 @@ function init() {
   buildMenu();
   createMainWindow();
   updateTray();
-  if (justSaved && sources.exists(justSaved)) {
-    const info = savedstate.info(justSaved);
-    const name = byId(justSaved).name;
-    if (info && info.error) flashNotice(`Couldn't save ${name}: ${info.error}`, 'error', 9000);
-    else flashNotice(`Saved. ${name} now opens your saved state.`, 'info', 7000);
+  if (freedOld > 0) {
+    flashNotice(`Saved states now keep only the pages: Jam freed ${formatSize(freedOld)} from the old copy. Save again to make a new one.`, 'info', 12000);
   }
   applyRpcSettings();
 

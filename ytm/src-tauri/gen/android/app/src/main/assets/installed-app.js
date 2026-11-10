@@ -1,8 +1,9 @@
-// Jam for Android, for web apps that work offline once installed (Octave): inside Jam the site
-// is treated as an installed app, so it turns on its offline mode, and its own service worker
-// (which keeps the app and your downloads available without internet) is kept registered.
-// What happens to that service worker is reported to Jam (JamNative.offlineStatus/offlineLog),
-// which shows it on its "isn't loading" page.
+// Jam (desktop and Android), for web apps that work offline once installed (Octave): inside Jam the
+// site is treated as an installed app, so it turns on its offline mode, and its own service worker
+// (which keeps the app and your downloads available without internet) is kept registered. What
+// happens to that service worker is reported to Jam (JamNative.offlineStatus/offlineLog), which
+// shows it on its "can't reach" page. It also makes saved states and reports covers (below).
+// The same file in desktop/src/ and Android's assets/: keep them identical.
 (function () {
   // Only the site's own pages: Jam's offline page also runs in this WebView, and has no service
   // worker of its own to report on.
