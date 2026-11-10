@@ -138,7 +138,8 @@ class MainActivity : TauriActivity() {
     private var lastHttpToast = 0L
     /** Saved state (SavedState.kt): shown for web apps that work offline. */
     private lateinit var savedButton: ImageButton
-    private var savedWait: View? = null
+    /** A save waiting for the live site's page to load (SavedState.kt). */
+    private var pendingSave: String? = null
     /** YouTube Music's webview (Tauri's), once Tauri hands it over. */
     private var engineView: WebView? = null
     private var pendingLink: String? = null
@@ -224,26 +225,10 @@ class MainActivity : TauriActivity() {
             Sources.exists(Prefs.str("defaultSource")) -> Prefs.str("defaultSource")
             else -> "octave"
         }
-        // A saved state being made (Jam just restarted for it): nothing may open the site's data
-        // until it's done.
-        SavedState.busy?.let { id ->
-            savedWait = TextView(this).apply {
-                text = "Saving ${if (Sources.exists(id)) Sources.byId(id).name else "the site"} as it is now…"
-                setTextColor(0xFFB8B8C6.toInt()); textSize = 15f; gravity = Gravity.CENTER
-            }.also { container.addView(it, FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT)) }
-            progress.isIndeterminate = true; progress.visibility = View.VISIBLE
-        }
-        val intentNow = intent
-        SavedState.whenReady {
-            savedWait?.let { container.removeView(it); savedWait = null; progress.isIndeterminate = false; progress.visibility = View.INVISIBLE }
-            Prefs.secret("savedJustMade")?.let { id ->
-                Prefs.setSecretNow("savedJustMade", null)
-                val err = SavedState.lastError(id)
-                Toast.makeText(this, if (err != null) "Couldn't save: $err" else "Saved. ${Sources.byId(id).name} now opens your saved state.", Toast.LENGTH_LONG).show()
-            }
-            switchSource(start)
-            handleLink(intentNow)
-        }
+        // Jam 2.2's whole-profile copies of saved states go, before any page opens (SavedState.kt).
+        if (profilesSupported) SavedState.cleanUp()
+        switchSource(start)
+        handleLink(intent)
         askForNotifications()
     }
 
@@ -482,7 +467,6 @@ class MainActivity : TauriActivity() {
 
     fun switchSource(id: String) {
         if (!Sources.exists(id)) return
-        if (SavedState.busy == id) return
         if (id == active && (views[id] != null || id == Sources.YTM)) return
         val prev = active
         // The source you leave is paused, as on desktop.
@@ -647,11 +631,12 @@ class MainActivity : TauriActivity() {
     private fun configure(wv: WebView, src: Source) {
         val saved = savedMode(src)
         if (profilesSupported) {
-            val name = if (saved) SavedState.savedProfile(src.id) else profileName(src.id)
+            // The saved state is the live site's own profile (where its downloads are) with the
+            // network blocked: its saved pages answer everything, from the site's offline worker,
+            // exactly as with no internet. The worker's setting is per profile, so it's set both ways.
+            val name = profileName(src.id)
             val profile = ProfileStore.getInstance().getOrCreateProfile(name)
-            // The saved state never touches the network: its own pages answer everything, from
-            // the site's offline worker, exactly as with no internet.
-            if (saved) runCatching { profile.serviceWorkerController.serviceWorkerWebSettings.blockNetworkLoads = true }
+            runCatching { profile.serviceWorkerController.serviceWorkerWebSettings.blockNetworkLoads = saved }
             WebViewCompat.setProfile(wv, name)
         }
         wv.setBackgroundColor(BG)
@@ -725,6 +710,10 @@ class MainActivity : TauriActivity() {
         @JavascriptInterface fun savedModeFor(id: String): Boolean = Sources.exists(id) && savedMode(Sources.byId(id))
         @JavascriptInterface fun hasSaved(id: String): Boolean = Sources.exists(id) && Sources.byId(id).offlineApp && profilesSupported && SavedState.exists(id)
         @JavascriptInterface fun useSaved(id: String, on: Boolean) { main.post { setSavedMode(id, on) } }
+        @JavascriptInterface fun savedStateDone(json: String?) {
+            if (json == null || json.length > 2000 || !Sources.exists(sourceId) || !Sources.byId(sourceId).offlineApp) return
+            main.post { savedStateDone(sourceId, json) }
+        }
         /** What the app did with its service worker, newest last (the last 40 events), for the offline page. */
         @JavascriptInterface fun offlineLog(json: String?) {
             if (json == null || json.length > 1000) return
@@ -776,11 +765,11 @@ class MainActivity : TauriActivity() {
         box.addView(row)
         val info = if (has) {
             val whenSaved = java.text.DateFormat.getDateTimeInstance(java.text.DateFormat.MEDIUM, java.text.DateFormat.SHORT).format(java.util.Date(SavedState.savedAt(id)))
-            "Saved $whenSaved · ${formatSize(SavedState.size(id))}"
+            "Saved $whenSaved" + (if (SavedState.size(id) > 0) " · ${formatSize(SavedState.size(id))} of pages" else "")
         } else "No saved state yet."
         box.addView(text(info, 13f, 0xFF9B9BAB.toInt(), dp(16)))
         SavedState.lastError(id)?.let { box.addView(text("Last save failed: $it", 13f, 0xFFF87171.toInt(), dp(6))) }
-        box.addView(text("Saving keeps everything ${src.name} has on this phone as it is now: its pages, your downloaded tracks and your login. Download the tracks you want first. Jam restarts for a few seconds to save.", 13f, 0xFF9B9BAB.toInt(), dp(12)))
+        box.addView(text("Saving keeps ${src.name}'s pages as they are now, so it opens with no internet and plays your downloaded songs. The songs themselves aren't copied, so a save takes only a few MB.", 13f, 0xFF9B9BAB.toInt(), dp(12)))
 
         val dialog = android.app.AlertDialog.Builder(ctx)
             .setTitle("${src.name}: saved state")
@@ -799,8 +788,8 @@ class MainActivity : TauriActivity() {
                 dialog.dismiss()
                 android.app.AlertDialog.Builder(ctx)
                     .setTitle("Delete the saved state?")
-                    .setMessage("${src.name} will open the live site. Your live site and its downloads aren't touched. Jam restarts for a moment.")
-                    .setPositiveButton("Delete") { _, _ -> SavedState.deleteAndRestart(this, id) }
+                    .setMessage("${src.name} will open the live site. Your downloads aren't touched.")
+                    .setPositiveButton("Delete") { _, _ -> deleteSaved(id) }
                     .setNegativeButton("Cancel", null)
                     .show()
             }
@@ -812,25 +801,60 @@ class MainActivity : TauriActivity() {
         val src = Sources.byId(id)
         val ctx = android.view.ContextThemeWrapper(this, android.R.style.Theme_DeviceDefault_Dialog_Alert)
         android.app.AlertDialog.Builder(ctx)
-            .setTitle("Save ${src.name} as it is now?")
+            .setTitle("Save ${src.name}'s pages as they are now?")
             .setMessage((if (SavedState.exists(id)) "This replaces your current saved state. " else "") +
-                "Jam saves the live site's pages and downloads, then opens ${src.name} from the save from now on. Music stops while Jam restarts.")
-            .setPositiveButton("Save") { _, _ ->
-                progress.isIndeterminate = true; progress.visibility = View.VISIBLE
-                // The live site's page is closed first so its data stops changing.
-                discard(id)
-                Prefs.setSecretNow("savedJustMade", id)
-                SavedState.saveAndRestart(this, id) { err ->
-                    if (err != null) {
-                        Prefs.setSecretNow("savedJustMade", null)
-                        progress.isIndeterminate = false; progress.visibility = View.INVISIBLE
-                        Toast.makeText(this, err, Toast.LENGTH_LONG).show()
-                        if (active == id) { active = null; switchSource(id) }
-                    }
-                }
-            }
+                "Jam saves the live site's pages (a few MB), then opens ${src.name} from them, with no internet. " +
+                "Your downloaded songs aren't copied: the saved state plays them from where they are. Download what you want first.")
+            .setPositiveButton("Save") { _, _ -> startSave(id) }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    /** Save from the live site: switch to it first if the saved state is open, then ask its page. */
+    private fun startSave(id: String) {
+        progress.isIndeterminate = true; progress.visibility = View.VISIBLE
+        Toast.makeText(this, "Saving ${Sources.byId(id).name}'s pages…", Toast.LENGTH_SHORT).show()
+        val v = views[id]
+        if (SavedState.enabled(id) || v == null || v.url?.startsWith("http") != true) {
+            pendingSave = id
+            if (SavedState.enabled(id)) { SavedState.setEnabled(id, false); discard(id) }
+            if (active == id) { active = null; switchSource(id) } else switchSource(id)
+            return
+        }
+        runSave(v)
+    }
+
+    private fun runSave(v: JamWebView) {
+        pendingSave = null
+        v.evaluateJavascript("window.__jamSaveState ? (window.__jamSaveState(), 'started') : 'missing'") { r ->
+            if (r?.contains("missing") == true) savedStateDone(v.sourceId, JSONObject().put("ok", false).put("error", "the page isn't ready yet. Try again in a moment").toString())
+        }
+    }
+
+    /** installed-app.js's answer to a save. */
+    private fun savedStateDone(id: String, json: String) {
+        progress.isIndeterminate = false; progress.visibility = View.INVISIBLE
+        val o = try { JSONObject(json) } catch (e: Exception) { JSONObject() }
+        val name = if (Sources.exists(id)) Sources.byId(id).name else "The site"
+        if (o.optBoolean("ok")) {
+            SavedState.recordSave(id, o.optInt("count"), o.optLong("bytes"))
+            discard(id)
+            if (active == id) { active = null; switchSource(id) } else renderChips()
+            Toast.makeText(this, "Saved ${o.optInt("count")} pages and files (${formatSize(o.optLong("bytes"))}). $name now opens your saved state.", Toast.LENGTH_LONG).show()
+        } else {
+            val err = o.optString("error").ifEmpty { "unknown error" }
+            SavedState.recordError(id, err)
+            Toast.makeText(this, "Couldn't save: $err", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun deleteSaved(id: String) {
+        views[id]?.evaluateJavascript("window.__jamDeleteSavedState && window.__jamDeleteSavedState()", null)
+        val wasOn = SavedState.enabled(id)
+        SavedState.forget(id)
+        if (wasOn) { discard(id); if (active == id) { active = null; switchSource(id) } }
+        renderChips()
+        Toast.makeText(this, "${Sources.byId(id).name}: saved state deleted", Toast.LENGTH_SHORT).show()
     }
 
     private fun formatSize(b: Long): String = when {
@@ -897,6 +921,11 @@ class MainActivity : TauriActivity() {
         override fun onPageFinished(view: WebView, url: String?) {
             val v = view as? JamWebView ?: return
             if (v.clearHistoryOnLoad && url != null && !url.startsWith(OFFLINE)) { v.clearHistoryOnLoad = false; v.clearHistory() }
+            // A save asked for while the saved state was open runs once the live site has loaded.
+            if (pendingSave == v.sourceId && url?.startsWith("http") == true && !SavedState.enabled(v.sourceId)) {
+                pendingSave = null
+                main.postDelayed({ runSave(v) }, 1500)
+            }
         }
 
         override fun onReceivedError(view: WebView, request: WebResourceRequest, error: WebResourceError) {

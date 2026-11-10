@@ -1,19 +1,16 @@
 # Desktop: for the next desktop release
 
-Nothing pending. Jam 3.1 brought over everything that shipped on Android first (2.1–2.3):
+- **Saved state: save the pages only, not the downloads.** Android 2.4 fixed a doubling bug: Jam
+  2.2 copied Octave's whole WebView profile, downloaded songs included, so 10 GB of downloads
+  became 20 GB. Desktop 3.1's `savedstate.js` has the same problem (it copies the default
+  session's IndexedDB/File System, where Octave keeps downloads, into `persist:jam-octave-saved`).
+  Port Android's approach: no session copy; the saved state is the live session with the network
+  blocked (network emulation offline + webRequest cancel, toggled per view/session), and
+  `installed-app.js` (copy the Android file, it has `__jamSaveState` / `__jamDeleteSavedState` /
+  the saved-mode restore) snapshots only Octave's Cache Storage (pages, page data, scripts,
+  images; never audio/video) into the `jam-saved-state` IndexedDB in Octave's own origin, and
+  writes it back over the caches when the saved state opens. Expose `JamNative.savedStateDone` in
+  `preload.js`; Save no longer relaunches Jam. On first start, delete `Partitions/jam-octave-saved`.
 
-- **YouTube Music downloads** (shared engine `ytm/src-tauri/src/downloads.rs`, shared UI): track
-  menus, album/playlist Download buttons, the selection bar, a Downloads page (sidebar entry),
-  Settings ▸ Playback ▸ Downloads (quality, storage, remove all), progress on the taskbar button
-  (`main.js`, `download-progress`).
-- **Offline library for YouTube Music**: offline, the Library and every playlist/album open from
-  their last copy (`page_snapshots`), undownloaded songs are greyed, Play/Shuffle take only the
-  downloaded ones.
-- **Octave offline**: `installed-app.js` (the same file as Android's) runs in Octave's page through
-  a generated preload (`main.js` `offlinePreload`), a failed page load waits to see whether
-  Octave's worker answered (`SERVED_PROBE`), and the "can't reach" page shows the offline copy's
-  status.
-- **Octave saved state**: `savedstate.js` copies the live session to `persist:jam-octave-saved`
-  at the next launch (Save relaunches Jam), and the saved session runs with network emulation
-  offline plus every request blocked. The save button in the title bar holds the switch, Save and
-  Delete. Test: `xvfb-run -a node desktop/test/saved-state.mjs` (with puppeteer-core).
+Already in 3.1 (shipped on Android first): YouTube Music downloads and offline library, Octave
+offline, the Octave saved-state switch (title-bar save button).

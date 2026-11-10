@@ -7,13 +7,10 @@ import java.io.File
 class JamApp : Application() {
     override fun onCreate() {
         super.onCreate()
-        // RestartActivity runs in a process of its own, which needs none of this.
+        // Only Jam's own process (a service in another process would need none of this).
         if (!isMainProcess()) return
         Prefs.init(this)
         Discord.init(this)
-        // A saved state asked for before Jam restarted (SavedState): made now, before anything
-        // opens the site's data.
-        SavedState.applyPending(this)
     }
 
     private fun isMainProcess(): Boolean {
