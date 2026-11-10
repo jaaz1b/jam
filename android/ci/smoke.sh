@@ -10,9 +10,9 @@ mkdir -p "$OUT"
 adb wait-for-device
 adb install -r -g "$APK" || { echo "install failed"; exit 1; }
 adb logcat -c
-summary "WebView: $(adb shell dumpsys webviewupdate | grep -m1 -oE 'Current WebView package[^)]*\)')"
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 summary() { echo "$*" | tee -a "$OUT/summary.txt"; }
+summary "WebView: $(adb shell dumpsys webviewupdate | grep -m1 -oE 'Current WebView package[^)]*\)')"
 
 timeout 90 adb shell am start -W -n "$PKG/$ACT"
 sleep 25; shot 01-octave
@@ -226,7 +226,8 @@ grep -iE "AndroidRuntime|FATAL|panicked|RustStdoutStderr|Tauri|JamPlugin|JamPlay
 summary "Engine log (last two app starts only): $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'downloads: downloaded video_id') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed, played from a download $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'playing the downloaded file') times"
 cat "$OUT"/limusic.log* 2>/dev/null | grep -E 'download' | tail -40 > "$OUT/downloads-log.txt"
 cat "$OUT/summary.txt"
-if grep -qE "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt"; then
+# Jam's own crashes only: uiautomator (the test's tapping tool) sometimes dies on its own.
+if grep -A2 "FATAL EXCEPTION" "$OUT/logcat-full.txt" | grep -q "Process: $PKG" || grep -q "panicked at" "$OUT/logcat-full.txt"; then
   echo "Jam crashed:"; grep -B2 -A40 -E "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt" | head -100; exit 1
 fi
 echo "smoke test finished"
