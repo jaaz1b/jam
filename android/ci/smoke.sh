@@ -88,7 +88,9 @@ if tap "Get started"; then
   tap "~.*(profile|account|avatar).*" || adb shell input tap 82 203; sleep 3; shot 02c-spotify-menu
   if tap Settings; then
     sleep 4; shot 02d-spotify-settings
-    tap About; sleep 2
+    # The tab row scrolls: About (with the Jam section) is past the right edge.
+    adb shell input swipe 1000 338 100 338 300; sleep 2
+    tap About; sleep 3; shot 02d-spotify-settings-about
     for s in 1 2 3; do tap "YouTube Music mode" && break; adb shell input swipe 540 1600 540 600 300; sleep 2; done
     sleep 2; shot 02e-ytm-mode-confirm
     if tap Switch; then SWITCHED=yes; summary "Switched to YouTube Music mode from Spotify mode's Settings"; sleep 20; fi
