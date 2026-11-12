@@ -163,7 +163,7 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
 
-      - name: YouTube Music engine (the Tauri build: engine, generated Kotlin, Tauri sources list)
+      - name: YouTube Music engine (the Tauri build, which also writes the generated Kotlin)
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           cd ytm/src-tauri
