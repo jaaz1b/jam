@@ -7,7 +7,7 @@
     <string name="welcome_rotate_clips">com os clipes oficiais.</string>
     <string name="welcome_rotate_offline">offline, com extensões.</string>
     <string name="welcome_login">Iniciar sessão com o Spotify</string>
-    <string name="welcome_privacy">Inicias sessão na página oficial do Spotify. O Orpheon nunca vê a tua palavra-passe.</string>
+    <string name="welcome_privacy">Inicias sessão na página oficial do Spotify. O Jam nunca vê a tua palavra-passe.</string>
     <string name="remove_from_liked">Remover das Músicas apreciadas</string>
     <string name="repeat_on">Repetir: ativado</string>
     <string name="repeat_one">Repetir uma</string>
@@ -67,7 +67,7 @@
     <string name="local_files_none_subtitle">Não encontrámos nenhum ficheiro de áudio reproduzível neste dispositivo. Quando houver, aparecem aqui.</string>
     <string name="downloads_empty_title">Transfere para ouvir offline</string>
     <string name="downloads_empty_subtitle">Toca em Transferir no menu de uma música, ou no botão de transferência de um álbum ou de uma playlist.</string>
-    <string name="downloads_source">FLAC sem perdas, verificado com a gravação original. Guardado apenas no Orpheon.</string>
+    <string name="downloads_source">FLAC sem perdas, verificado com a gravação original. Guardado apenas no Jam.</string>
     <string name="downloads_size">%1$s neste telemóvel</string>
     <string name="download_unavailable">Não foi encontrada nenhuma gravação correspondente</string>
     <string name="download_retry">Tentar novamente</string>
@@ -77,8 +77,8 @@
     <string name="playlist_not_found">Playlist não encontrada</string>
     <string name="browse_new_releases">Novidades</string>
     <string name="language_auto">Automático</string>
-    <string name="language_auto_detail">O idioma do teu telemóvel quando o Orpheon o tem (alemão, chinês, espanhol, francês, grego, inglês, italiano, polaco, português, russo); caso contrário, inglês</string>
-    <string name="language_partial_note">Outras línguas: os rótulos do Spotify são traduzidos, os textos do Orpheon ficam em inglês.</string>
+    <string name="language_auto_detail">O idioma do teu telemóvel quando o Jam o tem (alemão, chinês, espanhol, francês, grego, inglês, italiano, polaco, português, russo); caso contrário, inglês</string>
+    <string name="language_partial_note">Outras línguas: os rótulos do Spotify são traduzidos, os textos do Jam ficam em inglês.</string>
     <string name="restart_player_title">Reiniciar o leitor</string>
     <string name="restart_player_detail">Se a música deixar de responder: recarrega o leitor do Spotify</string>
     <string name="local_playlist_subtitle">Neste dispositivo</string>
@@ -130,7 +130,7 @@
     <string name="song_radio_name">Rádio de %1$s</string>
     <string name="local_files_find_hint">Procurar em Ficheiros locais</string>
     <string name="data_saver_title">Poupança de dados</string>
-    <string name="data_saver_summary">Em dados móveis, o Orpheon não usa dados: só tocam as músicas transferidas e os Ficheiros locais</string>
+    <string name="data_saver_summary">Em dados móveis, o Jam não usa dados: só tocam as músicas transferidas e os Ficheiros locais</string>
     <string name="data_saver_blocked">Poupança de dados: em dados móveis, só tocam as músicas transferidas e os Ficheiros locais</string>
     <string name="new_releases_followed">De artistas que segues</string>
     <string name="new_releases_latest">Últimos lançamentos</string>
@@ -148,7 +148,7 @@
     <string name="recap_top_tracks">Músicas mais ouvidas</string>
     <string name="recap_top_artists">Artistas mais ouvidos</string>
     <string name="recap_top_albums">Álbuns mais ouvidos</string>
-    <string name="recap_private_note">Conta tudo o que é reproduzido no Orpheon (Spotify, transferências, ficheiros locais). Fica neste telemóvel e nunca é enviado ao Spotify.</string>
+    <string name="recap_private_note">Conta tudo o que é reproduzido no Jam (Spotify, transferências, ficheiros locais). Fica neste telemóvel e nunca é enviado ao Spotify.</string>
     <string name="recap_detail">Inclui as tuas reproduções, transferências e ficheiros locais</string>
     <string name="track_credits">Créditos</string>
     <string name="exclude_taste">Excluir do teu perfil de gostos</string>
@@ -176,7 +176,7 @@
     <string name="track_sort_artist">Artista</string>
     <string name="track_sort_album">Álbum</string>
     <string name="track_sort_duration">Duração</string>
-    <string name="setup_title">Configurar o Orpheon</string>
+    <string name="setup_title">Configurar o Jam</string>
     <string name="setup_subtitle">Permite o que quiseres; podes alterar mais tarde nas definições do telemóvel.</string>
     <string name="setup_notifications_title">Notificações</string>
     <string name="setup_notifications_detail">Controlos no ecrã de bloqueio e no painel de notificações</string>
@@ -188,7 +188,7 @@
     <string name="setup_battery_detail">A música continua a tocar com o ecrã desligado</string>
     <string name="setup_enable">Permitir</string>
     <string name="setup_continue">Continuar</string>
-    <string name="setup_intro_title">Como o Orpheon funciona</string>
+    <string name="setup_intro_title">Como o Jam funciona</string>
     <string name="setup_intro_subtitle">Três coisas para saber antes de começar.</string>
     <string name="setup_intro_spotify_title">Spotify, sem anúncios</string>
     <string name="setup_intro_spotify_detail">Sua conta, suas playlists e curtidas, tocadas pelo próprio player web do Spotify. Contas gratuitas também funcionam.</string>
@@ -197,7 +197,7 @@
     <string name="setup_intro_ext_title">Extensões, se você quiser</string>
     <string name="setup_intro_ext_detail">Complementos feitos pela comunidade: outras fontes de áudio, downloads e mais. Já falamos delas.</string>
     <string name="setup_ext_title">Extensões</string>
-    <string name="setup_ext_subtitle">O Orpheon funciona do jeito que é: ele toca o Spotify. Extensões são complementos opcionais, feitos pela comunidade, que fazem mais.</string>
+    <string name="setup_ext_subtitle">O Jam funciona do jeito que é: ele toca o Spotify. Extensões são complementos opcionais, feitos pela comunidade, que fazem mais.</string>
     <string name="setup_ext_audio_title">Outras fontes de áudio</string>
     <string name="setup_ext_audio_detail">Uma extensão pode tocar suas músicas de outra fonte, na qualidade que ela oferece.</string>
     <string name="setup_ext_download_title">Downloads</string>
@@ -205,7 +205,7 @@
     <string name="setup_ext_more_detail">Seções da página inicial, páginas e ferramentas adicionadas pelos autores.</string>
     <string name="setup_ext_safe_title">Você no controle</string>
     <string name="setup_ext_safe_detail">Antes de instalar, ela mostra o que pode fazer. Pede de novo para qualquer coisa a mais, e você pode removê-la quando quiser.</string>
-    <string name="setup_ext_where">Encontre-as em Configurações, Extensões, no GitHub, GitLab e Codeberg. Elas são escritas pelos autores, não pelo Orpheon.</string>
+    <string name="setup_ext_where">Encontre-as em Configurações, Extensões, no GitHub, GitLab e Codeberg. Elas são escritas pelos autores, não pelo Jam.</string>
     <string name="setup_ext_browse">Ver as extensões</string>
     <string name="local_folders_button">Pastas</string>
     <string name="local_folders_title">Pastas</string>
@@ -238,7 +238,7 @@
     <string name="quality_download_hires">FLAC Hi-Res</string>
     <string name="quality_download_hires_detail">24 bits quando existirem, ficheiros cerca de três vezes maiores</string>
     <string name="setup_quality_title">Qualidade do som</string>
-    <string name="setup_quality_subtitle">Escolhe como o Orpheon reproduz e guarda a tua música. Podes alterar mais tarde nas Definições.</string>
+    <string name="setup_quality_subtitle">Escolhe como o Jam reproduz e guarda a tua música. Podes alterar mais tarde nas Definições.</string>
     <string name="downloads_off_toast">As transferências estão desativadas. Ativa-as nas Definições.</string>
     <string name="quality_streaming_high_detail">160 kbit/s</string>
     <string name="quality_download_small">Mais pequena</string>
@@ -252,7 +252,7 @@
     <string name="quality_now_unknown">Ainda desconhecida: começa uma música</string>
     <string name="update_downloading">A transferir… %1$d%%</string>
     <string name="update_installing">A instalar…</string>
-    <string name="update_needs_permission">Para atualizar, permite que o Orpheon instale aplicações e depois volta aqui.</string>
+    <string name="update_needs_permission">Para atualizar, permite que o Jam instale aplicações e depois volta aqui.</string>
     <string name="update_allow">Permitir</string>
     <string name="update_failed">A atualização falhou: %1$s</string>
     <string name="update_retry">Tentar novamente</string>
@@ -428,7 +428,7 @@
     <string name="player_forward_15">Avançar 15 segundos</string>
     <string name="player_sleep_timer">Temporizador de suspensão</string>
     <string name="settings_keep_playing_title">Continuar a reproduzir ao fechar a app</string>
-    <string name="settings_keep_playing_detail">Desativado: fechar o Orpheon nas apps recentes para a música</string>
+    <string name="settings_keep_playing_detail">Desativado: fechar o Jam nas apps recentes para a música</string>
     <string name="recommended_songs_from_name">Com base no nome desta playlist</string>
     <string name="recommended_songs_from_songs">Com base no conteúdo desta playlist</string>
     <string name="recommended_songs_refresh">Atualizar</string>
@@ -594,7 +594,7 @@
         <item quantity="other">%d músicas tocarão em seguida</item>
     </plurals>
     <string name="queue_list_none">Nenhuma destas músicas pode entrar na fila</string>
-    <string name="setup_ext_download_detail">Os downloads e outras fontes de áudio vêm de extensões. Instale uma extensão da comunidade na próxima página para baixar músicas e ouvir offline. As músicas ficam criptografadas no Orpheon.</string>
+    <string name="setup_ext_download_detail">Os downloads e outras fontes de áudio vêm de extensões. Instale uma extensão da comunidade na próxima página para baixar músicas e ouvir offline. As músicas ficam criptografadas no Jam.</string>
     <string name="setup_ext_home">Ir para o início</string>
     <string name="show_filter_all">Ordem padrão</string>
     <string name="show_filter_all_played">Todos os episódios foram ouvidos.</string>
@@ -637,8 +637,8 @@
     <string name="spatial_detail">Processamento mid/side: o que está nos lados ganha destaque, o que está ao centro fica no lugar. Só músicas de extensões, transferências e ficheiros locais: os streams do próprio Spotify não são processados. As músicas mono, e tudo quando está desligado, passam intactas.</string>
     <string name="spatial_width">Largura</string>
     <string name="playlist_reorder_hint">Arrasta uma música pela pega para a mover</string>
-    <string name="lan_sonos_consent">Para ligar %1$s, o Spotify pede uma vez a autorização que a sua aplicação para computador utiliza. Autorize-a ou feche esta página. O Orpheon só lê o endereço em que a página termina.</string>
-    <string name="lan_sonos_refused">%1$s precisa de um início de sessão do Spotify que o Orpheon não conseguiu obter. Abra-o uma vez com a aplicação Spotify e tente novamente.</string>
+    <string name="lan_sonos_consent">Para ligar %1$s, o Spotify pede uma vez a autorização que a sua aplicação para computador utiliza. Autorize-a ou feche esta página. O Jam só lê o endereço em que a página termina.</string>
+    <string name="lan_sonos_refused">%1$s precisa de um início de sessão do Spotify que o Jam não conseguiu obter. Abra-o uma vez com a aplicação Spotify e tente novamente.</string>
     <string name="lan_sonos_group">%1$s está agrupado com outras colunas: escolha a coluna principal do grupo ou desagrupe-o na aplicação Sonos.</string>
     <string name="voice_search">Pesquisar por voz</string>
     <string name="voice_search_unavailable">A pesquisa por voz precisa da app Google</string>
@@ -696,7 +696,7 @@
     <string name="settings_dynamic_color_title">Cores dinâmicas (Material You)</string>
     <string name="settings_dynamic_color_detail">A cor de destaque do visual Clássico vem do teu fundo de ecrã. O visual Imersivo mantém as cores da capa em reprodução.</string>
     <string name="settings_system_font_title">Tipo de letra do sistema</string>
-    <string name="settings_system_font_detail">Mostra o texto da app com o tipo de letra do telemóvel em vez do do Orpheon</string>
+    <string name="settings_system_font_detail">Mostra o texto da app com o tipo de letra do telemóvel em vez do do Jam</string>
     <string name="settings_download_lyrics_title">Transferir letras com as músicas</string>
     <string name="settings_download_lyrics_detail">Uma música transferida guarda a sua letra, mostrada sem ligação</string>
     <string name="settings_section_storage">Armazenamento</string>
@@ -712,7 +712,7 @@
     <string name="settings_automix_cache_detail">%1$s neste telemóvel. Limpas, as músicas são analisadas de novo quando tocam.</string>
     <string name="settings_automix_cache_clear">Limpar</string>
     <string name="settings_automix_intro_title">Como funciona o AutoMix</string>
-    <string name="settings_automix_intro_text">O AutoMix mistura as músicas que o próprio Orpheon toca: de extensões, transferências e ficheiros deste telemóvel. As músicas do Spotify tocam no leitor web do Spotify, cujo som a app nunca tem: só mudam com um desvanecimento.\n\nCada música é analisada uma vez (batidas, compassos, tom). As emissões são analisadas em Wi-Fi, ou com dados móveis se o permitir; uma música não analisada a tempo muda com um desvanecimento.</string>
+    <string name="settings_automix_intro_text">O AutoMix mistura as músicas que o próprio Jam toca: de extensões, transferências e ficheiros deste telemóvel. As músicas do Spotify tocam no leitor web do Spotify, cujo som a app nunca tem: só mudam com um desvanecimento.\n\nCada música é analisada uma vez (batidas, compassos, tom). As emissões são analisadas em Wi-Fi, ou com dados móveis se o permitir; uma música não analisada a tempo muda com um desvanecimento.</string>
     <string name="settings_automix_intro_ok">Entendido</string>
     <string name="automix_reason_spotify">Sem mistura agora: as músicas do Spotify tocam no leitor web do Spotify e só mudam com um desvanecimento.</string>
     <string name="automix_reason_cast">Sem mistura agora: num dispositivo Cast as músicas mudam sem mistura.</string>
@@ -724,7 +724,7 @@
     <string name="notify_releases_channel">Novidades</string>
     <string name="notify_release_title">Novo de %1$s</string>
     <string name="settings_release_notify">Notificações de novidades</string>
-    <string name="settings_release_notify_detail">Uma notificação quando um artista que segues lança algo, verificado a cada poucas horas enquanto o Orpheon está aberto</string>
+    <string name="settings_release_notify_detail">Uma notificação quando um artista que segues lança algo, verificado a cada poucas horas enquanto o Jam está aberto</string>
     <string name="quality_streaming_very_high">Muito alta</string>
     <string name="quality_streaming_very_high_detail">256 kbit/s, só contas Premium</string>
     <string name="login_help_button">Ajuda</string>

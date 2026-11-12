@@ -94,7 +94,9 @@ object UpdateChecker {
         // Both channels read the list: the repository also carries Myspoti's releases (2.x, whose
         // "latest" is one of them), never this app's.
         val bust = if (force) "&_=${System.currentTimeMillis()}" else ""
-        val url = "https://api.github.com/repos/$repo/releases?per_page=20$bust"
+        // Jam: the repository also carries the desktop builds' releases, a few a day: 100 reach
+        // back far enough for the Android ones.
+        val url = "https://api.github.com/repos/$repo/releases?per_page=100$bust"
         val request = Request.Builder().url(url).header("Accept", "application/vnd.github+json")
             .apply { if (force) { header("Cache-Control", "no-cache, no-store, max-age=0"); header("Pragma", "no-cache") } }.build()
         http.newCall(request).execute().use { r ->
@@ -115,8 +117,9 @@ object UpdateChecker {
      * this app cannot install): read as this app's, they were offered as updates opening their page.
      */
     internal fun newest(releases: List<JSONObject>, beta: Boolean = isBeta, abis: List<String> = deviceAbis, name: String = BuildConfig.APK_NAME): Release? =
-        releases.filter { !it.optBoolean("draft") && it.optBoolean("prerelease") == beta && isVersionTag(it.optString("tag_name")) }
-            .map { Release(it.getString("tag_name").removePrefix("v"), it.getString("html_url"), cleanNotes(it.optString("body")), apkAsset(it, beta, abis, name)) }
+        // Jam: every Android build is published as a pre-release ("android-v3.0.0-build.12"), one channel.
+        releases.filter { !it.optBoolean("draft") && isVersionTag(it.optString("tag_name")) }
+            .map { Release(versionOf(it.getString("tag_name")), it.getString("html_url"), cleanNotes(it.optString("body")), apkAsset(it, beta, abis, name)) }
             .filter { it.apkUrl.isNotEmpty() }
             .reduceOrNull { best, next -> if (isNewer(next.version, best.version)) next else best }
 
@@ -133,10 +136,16 @@ object UpdateChecker {
     }
 
     /** The ABIs a release carries one APK for, and their names in it (as app/build.gradle.kts `collectApks`). */
-    internal val RELEASE_ABIS = mapOf("arm64-v8a" to "ARMv8", "armeabi-v7a" to "ARMv7")
+    internal val RELEASE_ABIS = mapOf("arm64-v8a" to "", "x86_64" to "-x86_64")
 
-    /** "v2.4.0", "2.5.0-beta.1": a version of the app, not some other tag ("automix2-build205"). */
-    internal fun isVersionTag(tag: String): Boolean = Regex("v?\\d+(\\.\\d+)+(-[0-9A-Za-z.]+)?").matches(tag)
+    /**
+     * Jam: "android-v3.0.0-build.12", a build of the Android app, not another of the repository's
+     * tags (the desktop's "v3.2.0-build.5", Linux's "linux-v...").
+     */
+    internal fun isVersionTag(tag: String): Boolean = Regex("android-v\\d+(\\.\\d+)+(-[0-9A-Za-z.]+)?").matches(tag)
+
+    /** "android-v3.0.0-build.12" → "3.0.0-build.12", the app's versionName for that build. */
+    internal fun versionOf(tag: String): String = tag.removePrefix("android-").removePrefix("v")
 
     /**
      * The release's APK download link for this app's channel and this phone. A release carries
@@ -150,10 +159,11 @@ object UpdateChecker {
      */
     internal fun apkAsset(release: JSONObject, beta: Boolean = isBeta, abis: List<String> = deviceAbis, name: String = BuildConfig.APK_NAME): String {
         val assets = release.optJSONArray("assets") ?: return ""
-        val version = release.optString("tag_name").removePrefix("v")
-        val named = "${if (beta) "$name-Beta" else name}-$version"
+        val version = versionOf(release.optString("tag_name"))
+        // Jam: Jam-Android-<version>.apk (arm64 phones), Jam-Android-<version>-x86_64.apk (emulators).
+        val named = "$name-$version"
         val byName = (0 until assets.length()).map { assets.getJSONObject(it) }.associateBy { it.optString("name") }
-        return abis.filter { it in RELEASE_ABIS }.map { "$named-${RELEASE_ABIS.getValue(it)}.apk" }
+        return abis.filter { it in RELEASE_ABIS }.map { "$named${RELEASE_ABIS.getValue(it)}.apk" }
             .firstNotNullOfOrNull { byName[it] }?.optString("browser_download_url").orEmpty()
     }
 

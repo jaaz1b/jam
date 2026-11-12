@@ -35,5 +35,5 @@
     <string name="settings_genius_title">Genius</string>
     <string name="settings_genius_detail">Znaczenie piosenek i adnotacje do wersów oraz teksty z Genius, gdy żadne inne źródło ich nie ma. Wyłączone: do Genius nie trafia żadne zapytanie.</string>
     <string name="welcome_start">Zaczynamy</string>
-    <string name="setup_account_spotify_next">Potem zalogujesz się na stronie samego Spotify. Orpheon nigdy nie widzi Twojego hasła.</string>
+    <string name="setup_account_spotify_next">Potem zalogujesz się na stronie samego Spotify. Jam nigdy nie widzi Twojego hasła.</string>
 </resources>

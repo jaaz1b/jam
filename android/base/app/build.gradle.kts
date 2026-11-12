@@ -63,6 +63,9 @@ android {
         // Not in the dev and Mix Lab builds (below): no release carries their app id.
         buildConfigField("String", "UPDATE_REPO", "\"${if (automixLab) "" else (findProperty("updateRepo") as String?) ?: System.getenv("JAM_UPDATE_REPO") ?: ""}\"")
         buildConfigField("String", "APK_NAME", "\"$APK_NAME\"")
+        // Jam: the Orpheon release this app is built on (kota-zo/Orpheon@70f323c). Extensions say
+        // which Orpheon they need: they are checked against this, not against Jam's own version.
+        buildConfigField("String", "ORPHEON_VERSION", "\"1.0.0\"")
         // -Pabis=arm64-v8a: one APK for one phone (the test builds). Without it, the ABI splits below.
         (findProperty("abis") as String?)?.let { ndk { abiFilters += it.split(",") } }
         // On-device tests (codecs): ./gradlew connectedDebugAndroidTest

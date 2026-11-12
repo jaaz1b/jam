@@ -111,7 +111,7 @@ import kotlinx.coroutines.withContext
 internal val Warning = Color(0xFFFFA42B)
 
 /** This Myspoti's version name, compared with an extension's `minAppVersion`. */
-internal val appVersion: String get() = app.myspoti.engine.BuildConfig.VERSION_NAME
+internal val appVersion: String get() = app.myspoti.engine.BuildConfig.ORPHEON_VERSION // Jam: see app/build.gradle.kts
 
 /** A package read and waiting for the user's answer in the install prompt; [origin]: its GitHub source. */
 internal class PendingInstall(val zip: ByteArray, val pkg: ExtensionPackage, val source: String, val plan: InstallPlan, val origin: app.myspoti.extensions.Origin? = null)

@@ -8,4 +8,6 @@
     <string name="jam_ytm_mode_switch">Switch</string>
     <string name="jam_discord_title">Discord Rich Presence</string>
     <string name="jam_discord_detail">Shows what you play as your Discord status: sign in, choose the lines and buttons</string>
+    <string name="jam_about_orpheon">Built on Orpheon</string>
+    <string name="jam_about_orpheon_detail">Jam\'s Spotify mode is Orpheon (formerly Myspoti) by kota-zo, free software under the GPL-3.0. The support buttons below go to its author.</string>
 </resources>

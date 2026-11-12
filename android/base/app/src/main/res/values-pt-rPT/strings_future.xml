@@ -35,5 +35,5 @@
     <string name="settings_genius_title">Genius</string>
     <string name="settings_genius_detail">O significado das músicas e as anotações dos versos, e as letras do Genius quando nenhuma outra fonte as tem. Desativado: nada é pedido ao Genius.</string>
     <string name="welcome_start">Começar</string>
-    <string name="setup_account_spotify_next">A seguir inicias sessão na página oficial do Spotify. O Orpheon nunca vê a tua palavra-passe.</string>
+    <string name="setup_account_spotify_next">A seguir inicias sessão na página oficial do Spotify. O Jam nunca vê a tua palavra-passe.</string>
 </resources>

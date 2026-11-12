@@ -2,7 +2,7 @@
 <resources>
     <string name="settings_native_audio_title">Native player (experimental)</string>
     <string name="settings_native_audio_detail">The account\'s songs are played by the app\'s own player instead of the hidden web page. Being tried: sorted lists play in their own order, and some controls may lag.</string>
-    <string name="brand_name" translatable="false">Orpheon</string>
+    <string name="brand_name" translatable="false">Jam</string>
     <string name="welcome_rotate_sources">from the sources you choose.</string>
     <string name="welcome_rotate_mix">mixed like a DJ set.</string>
     <string name="album_label">Label: %1$s</string>
@@ -36,5 +36,5 @@
     <string name="settings_genius_title">Genius</string>
     <string name="settings_genius_detail">What songs mean and the annotations on their lines, and Genius lyrics when no other source has them. Off: nothing is asked of Genius.</string>
     <string name="welcome_start">Get started</string>
-    <string name="setup_account_spotify_next">You sign in next, on Spotify\'s own page. Orpheon never sees your password.</string>
+    <string name="setup_account_spotify_next">You sign in next, on Spotify\'s own page. Jam never sees your password.</string>
 </resources>

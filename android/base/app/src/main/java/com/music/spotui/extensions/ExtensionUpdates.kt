@@ -221,7 +221,7 @@ object ExtensionUpdates {
         if (!manual && m.versionCode == e.declinedVersionCode && (e.declinedSha == null || e.declinedSha == f.pkg.sha256)) return Result.DECLINED
         if (blocked(m.id, f.pkg.sha256) != null) return Result.BLOCKED
         if (!Catalog.Entry(m.id, m.name, m.version, m.versionCode, m.apiVersion, m.author, url = "", sha256 = "", minAppVersion = m.minAppVersion)
-                .compatible(app.myspoti.engine.BuildConfig.VERSION_NAME)) return Result.INCOMPATIBLE
+                .compatible(app.myspoti.engine.BuildConfig.ORPHEON_VERSION)) return Result.INCOMPATIBLE
         val running = Extensions.pkg(id)
         var accepted = e.accepted ?: Extensions.manifest(id)?.let { Snapshot.of(it, origin.repo) } ?: return Result.FAILED
         // Installs from before the code and the repository were pinned: pinned now, from what runs and what the host says, without asking.

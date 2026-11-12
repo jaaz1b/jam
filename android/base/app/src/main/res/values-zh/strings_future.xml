@@ -35,5 +35,5 @@
     <string name="settings_genius_title">Genius</string>
     <string name="settings_genius_detail">歌曲的含义和歌词注释，以及在其他来源都没有歌词时使用 Genius 的歌词。关闭后：不会向 Genius 发出任何请求。</string>
     <string name="welcome_start">开始</string>
-    <string name="setup_account_spotify_next">接下来你将在 Spotify 自己的页面登录。Orpheon 永远看不到你的密码。</string>
+    <string name="setup_account_spotify_next">接下来你将在 Spotify 自己的页面登录。Jam 永远看不到你的密码。</string>
 </resources>

@@ -35,5 +35,5 @@
     <string name="settings_genius_title">Genius</string>
     <string name="settings_genius_detail">Смысл песен и аннотации к строкам, а также тексты Genius, когда их нет в других источниках. Выключено: к Genius не отправляется ни одного запроса.</string>
     <string name="welcome_start">Начать</string>
-    <string name="setup_account_spotify_next">Затем вы войдёте на странице самого Spotify. Orpheon никогда не видит ваш пароль.</string>
+    <string name="setup_account_spotify_next">Затем вы войдёте на странице самого Spotify. Jam никогда не видит ваш пароль.</string>
 </resources>
