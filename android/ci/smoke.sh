@@ -13,6 +13,38 @@ adb install -r -g "$APK" || { echo "install failed"; exit 1; }
 adb logcat -c
 shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 summary() { echo "$*" | tee -a "$OUT/summary.txt"; }
+# Taps by label: tap <text or content-desc, or ~regex> [first|last]. Defined before use.
+tap() { # tap <text or content-desc> [first|last]
+  # A dump that fails (the screen never idle) leaves the last one behind, so clear it first.
+  rm -f "$OUT/ui-tap.xml"
+  for try in 1 2 3 4 5 6; do
+    adb shell rm -f /sdcard/ui.xml; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
+    adb pull /sdcard/ui.xml "$OUT/ui-tap.xml" >/dev/null 2>&1 && break
+    sleep 3
+  done
+  local xy
+  xy=$(python3 - "$OUT/ui-tap.xml" "$1" "${2:-first}" <<'PY'
+import html, re, sys
+try: x = open(sys.argv[1]).read()
+except Exception: sys.exit()
+want, which, hits = sys.argv[2], sys.argv[3], []
+for m in re.finditer(r'<node [^>]*>', x):
+    n = m.group(0)
+    t = re.search(r' text="([^"]*)"', n); d = re.search(r' content-desc="([^"]*)"', n)
+    b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
+    if not b: continue
+    labels = [(html.unescape(t.group(1)) if t else ''), (html.unescape(d.group(1)) if d else '')]
+    if any((re.fullmatch(want[1:], l, re.I) if want.startswith('~') else want.lower() == l.lower()) for l in labels):
+        a, c, e, f = map(int, b.groups())
+        if e > a and f > c: hits.append(((a + e) // 2, (c + f) // 2))
+if hits:
+    h = hits[-1] if which == 'last' else hits[0]; print(h[0], h[1])
+PY
+)
+  if [ -n "$xy" ]; then adb shell input tap $xy; return 0; fi
+  summary "tap: '$1' not found"; return 1
+}
+
 summary "WebView: $(adb shell dumpsys webviewupdate | grep -m1 -oE 'Current WebView package[^)]*\)')"
 
 # Cold starts of the launcher (am start -W: until the first frame), median of five, after one
@@ -40,13 +72,37 @@ cold "Spotify mode, compiled (speed-profile)"
 sleep 8; shot 01-spotify-first-screen
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui-spotify.xml" >/dev/null 2>&1
 
+# 1b. Spotify mode without an account (the onboarding's "None"), to its Settings: the Jam section,
+#     then YouTube Music mode switched on from there, the way a user does it.
+SWITCHED=""
+if tap "Get started"; then
+  sleep 4; shot 02a-spotify-setup
+  tap "~No account:.*" && sleep 1 && tap Continue && sleep 4
+  for step in 1 2 3 4 5 6; do
+    shot "02b-spotify-setup-$step"
+    tap "~(Continue|Next|Skip|Not now|Later|Done|Finish|Start listening|Allow)" last || break
+    sleep 4
+  done
+  sleep 6; shot 02c-spotify-home
+  # The profile menu (the avatar), then Settings; the Classic look's About tab holds the Jam rows.
+  if tap "~.*(profile|account|menu|avatar).*" || true; then sleep 3; fi
+  if tap Settings; then
+    sleep 4; shot 02d-spotify-settings
+    tap About; sleep 2
+    for s in 1 2 3; do tap "YouTube Music mode" && break; adb shell input swipe 540 1600 540 600 300; sleep 2; done
+    sleep 2; shot 02e-ytm-mode-confirm
+    if tap Switch; then SWITCHED=yes; summary "Switched to YouTube Music mode from Spotify mode's Settings"; sleep 20; fi
+  fi
+fi
+[ -n "$SWITCHED" ] || summary "Spotify mode's Settings not reached by the test: YouTube Music mode set the way the switch saves it"
+
 # 2. YouTube Music mode, as Settings ▸ YouTube Music mode leaves it (JamMode: jam_mode.xml, then a
 #    restart). The launcher must hand over to YouTube Music.
 adb shell am force-stop "$PKG"
 timeout 30 adb root </dev/null >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
 printf "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <boolean name=\"ytm\" value=\"true\" />\n</map>\n" > "$OUT/jam_mode.xml"
 adb push "$OUT/jam_mode.xml" /data/local/tmp/jam_mode.xml >/dev/null
-adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam_mode.xml $D/shared_prefs/jam_mode.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam_mode.xml; chmod 660 $D/shared_prefs/jam_mode.xml; restorecon -R $D/shared_prefs'
+[ -n "$SWITCHED" ] || adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam_mode.xml $D/shared_prefs/jam_mode.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam_mode.xml; chmod 660 $D/shared_prefs/jam_mode.xml; restorecon -R $D/shared_prefs'
 cold "YouTube Music mode (launcher → YouTube Music)"
 summary "On screen in YouTube Music mode: $(adb shell dumpsys activity activities | grep -m1 -oE 'topResumedActivity=[^ ]+ [^ ]+ [^ ]+' )"
 summary "Spotify mode's entry points in YouTube Music mode: $(adb shell pm dump $PKG | grep -A12 'disabledComponents:' | grep -cE 'PlaybackService|MediaButtonReceiver|NowPlayingWidget|WearLinkService') turned off (of 4)"
@@ -92,35 +148,6 @@ done
 # downloads with the phone in airplane mode. Taps go through uiautomator, which sees the page's
 # buttons by their labels; playback is paused first, since a moving progress bar keeps uiautomator
 # from ever finding the screen idle.
-tap() { # tap <text or content-desc> [first|last]
-  # A dump that fails (the screen never idle) leaves the last one behind, so clear it first.
-  rm -f "$OUT/ui-tap.xml"
-  for try in 1 2 3 4 5 6; do
-    adb shell rm -f /sdcard/ui.xml; adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
-    adb pull /sdcard/ui.xml "$OUT/ui-tap.xml" >/dev/null 2>&1 && break
-    sleep 3
-  done
-  local xy
-  xy=$(python3 - "$OUT/ui-tap.xml" "$1" "${2:-first}" <<'PY'
-import html, re, sys
-try: x = open(sys.argv[1]).read()
-except Exception: sys.exit()
-want, which, hits = sys.argv[2], sys.argv[3], []
-for m in re.finditer(r'<node [^>]*>', x):
-    n = m.group(0)
-    t = re.search(r' text="([^"]*)"', n); d = re.search(r' content-desc="([^"]*)"', n)
-    b = re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n)
-    if not b: continue
-    if want.lower() in {(html.unescape(t.group(1)) if t else '').lower(), (html.unescape(d.group(1)) if d else '').lower()}:
-        a, c, e, f = map(int, b.groups())
-        if e > a and f > c: hits.append(((a + e) // 2, (c + f) // 2))
-if hits:
-    h = hits[-1] if which == 'last' else hits[0]; print(h[0], h[1])
-PY
-)
-  if [ -n "$xy" ]; then adb shell input tap $xy; return 0; fi
-  summary "tap: '$1' not found"; return 1
-}
 adb shell input keyevent KEYCODE_MEDIA_PAUSE; sleep 1
 # 1. A whole album, from the Download button in its header. (CI's datacenter IP is refused some
 #    tracks without an account; the failures show on the Downloads page.)

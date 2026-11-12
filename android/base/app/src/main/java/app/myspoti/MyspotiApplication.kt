@@ -26,10 +26,9 @@ class MyspotiApplication : Application() {
         // presence is shared. In YouTube Music mode nothing of the Spotify side starts (no hidden
         // Web Player, downloads or extensions): YouTube Music's engine starts with its activity.
         app.jam.JamStartup.step("App.start") { app.jam.android.JamApp.start(this) }
-        if (app.jam.android.JamMode.ytm(this)) {
-            app.jam.android.JamMode.applyEntryPoints(this)
-            return
-        }
+        // The Spotify side's outside entry points follow the mode (off in YouTube Music mode).
+        app.jam.android.JamMode.applyEntryPoints(this)
+        if (app.jam.android.JamMode.ytm(this)) return
         // A crash or a freeze of the last run, back in this run's diagnostic report.
         app.jam.JamStartup.step("App.install") { app.myspoti.host.android.LastExit.install(this) }
         app.jam.JamStartup.step("App.init") { app.myspoti.power.EnergySettings.init(this) }
