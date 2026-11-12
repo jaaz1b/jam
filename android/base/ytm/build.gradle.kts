@@ -40,13 +40,14 @@ android {
     sourceSets {
         getByName("main") {
             manifest.srcFile("AndroidManifest.xml")
-            java.srcDir(jamApp.resolve("src/main/java"))
-            tauriLibs.forEach { java.srcDir(it.resolve("src/main/java")) }
-            // Tauri's runtime reads app.tauri.BuildConfig; built here, not as its own module.
-            java.srcDir("src/tauri-shim/java")
-            res.srcDir(jamApp.resolve("src/main/res"))
-            assets.srcDir(jamApp.resolve("src/main/assets"))
-            jniLibs.srcDir(jamApp.resolve("src/main/jniLibs"))
+            // AGP 9's built-in Kotlin compiles the `kotlin` directories: the code goes in both.
+            val code = listOf(jamApp.resolve("src/main/java")) + tauriLibs.map { it.resolve("src/main/java") } +
+                // Tauri's runtime reads app.tauri.BuildConfig; built here, not as its own module.
+                file("src/tauri-shim/java")
+            code.forEach { java.directories += it.path; kotlin.directories += it.path }
+            res.directories += jamApp.resolve("src/main/res").path
+            assets.directories += jamApp.resolve("src/main/assets").path
+            jniLibs.directories += jamApp.resolve("src/main/jniLibs").path
         }
     }
     compileOptions {

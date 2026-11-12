@@ -21,22 +21,23 @@ import kotlinx.coroutines.launch
 class MyspotiApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        app.jam.JamStartup.mark("Application.onCreate")
         // Jam: Jam for Android's start-up (its settings, Discord), in both modes: the Discord
         // presence is shared. In YouTube Music mode nothing of the Spotify side starts (no hidden
         // Web Player, downloads or extensions): YouTube Music's engine starts with its activity.
-        app.jam.android.JamApp.start(this)
+        app.jam.JamStartup.step("App.start") { app.jam.android.JamApp.start(this) }
         if (app.jam.android.JamMode.ytm(this)) {
             app.jam.android.JamMode.applyEntryPoints(this)
             return
         }
         // A crash or a freeze of the last run, back in this run's diagnostic report.
-        app.myspoti.host.android.LastExit.install(this)
-        app.myspoti.power.EnergySettings.init(this)
+        app.jam.JamStartup.step("App.install") { app.myspoti.host.android.LastExit.install(this) }
+        app.jam.JamStartup.step("App.init") { app.myspoti.power.EnergySettings.init(this) }
         // Spotify session (hidden Web Player + API), caches, downloads, data saver.
-        Graph.init(this)
-        SongPlayer.attachEngine(Graph.currentSongState)
+        app.jam.JamStartup.step("App.init") { Graph.init(this) }
+        app.jam.JamStartup.step("App.attachEngine") { SongPlayer.attachEngine(Graph.currentSongState) }
         // Headphones or Bluetooth gone: pause rather than play on the speaker.
-        com.music.spotui.di.NoisyAudio.register(this)
+        app.jam.JamStartup.step("App.register") { com.music.spotui.di.NoisyAudio.register(this) }
         // Downloaded songs are no longer reported to Spotify: drop the old report queue,
         // whose replays sent play commands that took over the Web Player.
         runCatching { java.io.File(filesDir, "wrapped_queue.json").delete() }
@@ -52,13 +53,13 @@ class MyspotiApplication : Application() {
                 // The last plays through the extensions, newest first, masked (no query strings, headers or stored values).
                 com.music.spotui.extensions.Extensions.attempts.last().map { "play attempt" to it.summary() }
         }
-        prefetch()
+        app.jam.JamStartup.step("App.prefetch") { prefetch() }
         // New releases of the artists followed, said in a notification (a setting).
-        com.music.spotui.data.NewReleaseNotifier.start(this)
+        app.jam.JamStartup.step("App.start") { com.music.spotui.data.NewReleaseNotifier.start(this) }
         // Another account kept on the phone takes over: its own quality and extension settings.
-        followAccount()
+        app.jam.JamStartup.step("App.followAccount") { followAccount() }
         // A TV: what it has no screen for, off; the energy saver on when it is short of means.
-        com.music.spotui.ui.tv.TvCaps.apply(this)
+        app.jam.JamStartup.step("App.apply") { com.music.spotui.ui.tv.TvCaps.apply(this) }
     }
 
     /**

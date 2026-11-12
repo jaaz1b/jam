@@ -190,7 +190,8 @@ jobs:
           ./gradlew :app:assembleRelease :app:collectApks --stacktrace \
             -PappVersionName="$VERSION" \
             -PappVersionCode="$((GITHUB_RUN_NUMBER + 100))" \
-            -PupdateRepo="$GITHUB_REPOSITORY"
+            -PupdateRepo="$GITHUB_REPOSITORY" \
+            -PjamStartupTrace
           mkdir -p ../../out && cp app/build/release-apks/*.apk ../../out/
           ls -la ../../out
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"

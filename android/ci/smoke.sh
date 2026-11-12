@@ -30,6 +30,13 @@ cold() { # cold <label>
 
 # 1. Spotify mode, the default: Orpheon's first screen.
 cold "Spotify mode"
+# Where a Spotify-mode start goes (builds made with -PjamStartupTrace): the last start's steps.
+adb logcat -d -s JamStartup:W > "$OUT/startup-trace.txt"
+summary "Start-up steps over 3 ms, last start: $(awk '/Application.onCreate at/{buf=""} {buf=buf"\n"$0} END{print buf}' "$OUT/startup-trace.txt" | grep -oE '(App|Graph)\.[A-Za-z.]+ [0-9.]+ ms' | awk '$2>3' | tr '\n' ';')"
+summary "Last start: $(grep -oE '(Application.onCreate|MainActivity.onCreate|MainActivity first frame posted) at [0-9]+ ms' "$OUT/startup-trace.txt" | tail -3 | tr '\n' ';')"
+# The same after the system compiled the app from its profile (as a phone does overnight).
+adb shell cmd package compile -f -m speed-profile "$PKG" >/dev/null 2>&1
+cold "Spotify mode, compiled (speed-profile)"
 sleep 8; shot 01-spotify-first-screen
 adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui-spotify.xml" >/dev/null 2>&1
 
