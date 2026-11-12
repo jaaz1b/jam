@@ -78,7 +78,8 @@ dependencies {
 // Only when this module builds: the other modules' unit tests need no Rust toolchain.
 val tauriBuilt = tauriLibs.isNotEmpty() && jamApp.resolve("src/main/java/app/jam/android/generated").isDirectory
 tasks.named("preBuild") {
+    val built = tauriBuilt // a plain value: the configuration cache can't keep the script itself
     doFirst {
-        if (!tauriBuilt) throw GradleException("YouTube Music mode needs the Tauri build first: cd ytm/src-tauri && tauri android build --apk --target aarch64 (see android/base/ytm/build.gradle.kts)")
+        if (!built) throw GradleException("YouTube Music mode needs the Tauri build first: cd ytm/src-tauri && tauri android build --apk --target aarch64 (see android/base/ytm/build.gradle.kts)")
     }
 }

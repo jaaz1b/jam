@@ -149,6 +149,10 @@ android {
     // Jam: arm64 phones and x86_64 emulators (the ABIs above). YouTube Music mode's libmpv and the
     // ONNX runtime both bring the NDK's C++ runtime: one copy.
     packaging { jniLibs { excludes += listOf("lib/x86/**", "lib/armeabi-v7a/**"); pickFirsts += "**/libc++_shared.so" } }
+    // Jam: native libraries compressed in the APK, as Jam for Android had them: YouTube Music mode's
+    // engine, libmpv and FFmpeg stored as they are made the APK about 100 MB bigger. Extracted
+    // once at install; loading them costs the same.
+    packaging { jniLibs { useLegacyPackaging = true } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
