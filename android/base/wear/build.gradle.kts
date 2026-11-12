@@ -13,8 +13,8 @@ android {
     val version = (findProperty("appVersionName") as String?) ?: "1.0.0"
     val beta = findProperty("appVersionName") == null || version.contains("-beta")
     defaultConfig {
-        // As the phone's app (base/app): betas "app.orpheon.beta", releases "app.orpheon", debug builds ".dev".
-        applicationId = if (beta) "app.orpheon.beta" else "app.orpheon"
+        // As the phone's app (base/app): Jam's "app.jam.android", debug builds ".dev".
+        applicationId = "app.jam.android"
         minSdk = 30
         targetSdk = 36
         versionCode = (findProperty("appVersionCode") as String?)?.toIntOrNull() ?: 200

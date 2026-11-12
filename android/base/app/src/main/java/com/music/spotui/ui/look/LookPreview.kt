@@ -253,7 +253,7 @@ private fun TimeRow(seconds: Long, color: Color, family: FontFamily, size: TextU
 // ---------------------------------------------------------------- Classic: today's look
 
 private val ClassicGrey = Color(0xFFB3B3B3)
-private val ClassicGreen = Color(0xFF1DB954)
+private val ClassicGreen = Color(0xFF8B5CF6) // Jam: the Classic look's default accent, Jam's violet
 private val ClassicTop = Color(0xFF9A2A5C)
 private val ClassicBottom = Color(0xFF2A0A1B)
 

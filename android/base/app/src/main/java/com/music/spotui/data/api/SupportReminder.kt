@@ -43,7 +43,8 @@ object SupportReminder {
 
     /** A thank-you colour: the app's accent, and the app icon's bars. */
     enum class Accent(val key: String, val color: Color) {
-        GREEN("green", Color(0xFF1ED760)),
+        // Jam: the default accent ("green", the key it always had) is Jam's violet.
+        GREEN("green", Color(0xFF8B5CF6)),
         BLUE("blue", Color(0xFF509BF5)),
         PURPLE("purple", Color(0xFFAF7AF6)),
         PINK("pink", Color(0xFFF573A0)),
