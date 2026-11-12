@@ -8,3 +8,7 @@
 -dontwarn app.tauri.**
 -dontwarn com.fasterxml.jackson.databind.ext.**
 -keep class com.fasterxml.jackson.** { *; }
+# Jackson (the Tauri runtime's JSON) refers to JDK classes Android doesn't have; it never loads them there.
+-dontwarn java.beans.**
+-dontwarn org.w3c.dom.bootstrap.**
+-dontwarn com.fasterxml.jackson.databind.**

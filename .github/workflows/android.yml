@@ -1,9 +1,10 @@
-# Jam for Android: Octave, Monochrome and your own sources (web), plus YouTube Music as the real
-# Jam app: the same Rust engine and Svelte UI as Jam on Windows (Limusic rebuilt into Jam), run by
-# Tauri on Android, playing through libmpv.
+# Jam for Android 3: Orpheon's app (android/base, Spotify mode, with its extensions) rebranded as Jam,
+# with YouTube Music mode: the same Rust engine and Svelte UI as Jam on Windows (Limusic rebuilt into
+# Jam), run by Tauri, playing through libmpv, built into the same APK (android/base/ytm).
 #
-# Jobs: libmpv (cached; rebuilt only when android/libmpv changes) → APK (Tauri Android) → release,
-# then an emulator test whose screenshots and logs go on the release as smoke-test.zip.
+# Jobs: libmpv (cached; rebuilt only when android/libmpv changes) → APK (the Tauri build first, for
+# the engine and its generated Kotlin, then the Jam app's Gradle build) → release, then an emulator
+# test whose screenshots, start times and logs go on the release as smoke-test.zip.
 #
 # Signing: android/keystore/jam-debug.jks unless these secrets are set (see android/keystore/README.md):
 # JAM_KEYSTORE_B64, JAM_KEYSTORE_PASSWORD, JAM_KEY_ALIAS, JAM_KEY_PASSWORD.
@@ -21,6 +22,10 @@ on:
 
 permissions:
   contents: write
+
+env:
+  # The Jam app's version; each build is <this>-build.<run number> (its versionName and tag).
+  JAM_ANDROID_VERSION: "3.0.0"
 
 concurrency:
   group: android-${{ github.ref }}
@@ -158,7 +163,7 @@ jobs:
             } >> "$GITHUB_ENV"
           fi
 
-      - name: Build the APKs
+      - name: YouTube Music engine (the Tauri build: engine, generated Kotlin, Tauri sources list)
         run: |
           export NDK_HOME="$ANDROID_NDK_LATEST_HOME"
           cd ytm/src-tauri
@@ -167,16 +172,27 @@ jobs:
           tauri android build --apk --split-per-abi --target aarch64 --target x86_64 \
             --config '{"build":{"beforeBuildCommand":""}}'
 
-      - name: Name the APKs
+      # The Jam app (android/base): AGP 9 wants JDK 21 and platform 37.
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Android platform 37
+        run: yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-37.0" "build-tools;36.0.0" >/dev/null
+
+      - name: Build the Jam app
         id: apk
         run: |
-          VERSION=$(grep -oP 'versionName = "\K[^"]+' ytm/src-tauri/gen/android/app/build.gradle.kts)
-          OUT=ytm/src-tauri/gen/android/app/build/outputs/apk
-          find "$OUT" -name "*.apk" | sort
-          mkdir -p out
-          cp "$(find "$OUT" -path '*arm64*' -name '*release*.apk' | head -1)" "out/Jam-Android-${VERSION}.apk"
-          cp "$(find "$OUT" -path '*x86_64*' -name '*release*.apk' | head -1)" "out/Jam-Android-${VERSION}-x86_64.apk"
-          ls -la out
+          VERSION="${JAM_ANDROID_VERSION}-build.${GITHUB_RUN_NUMBER}"
+          cd android/base
+          for i in 1 2 3; do ./gradlew --version >/dev/null && break; sleep 20; done
+          ./gradlew :app:assembleRelease :app:collectApks --stacktrace \
+            -PappVersionName="$VERSION" \
+            -PappVersionCode="$((GITHUB_RUN_NUMBER + 100))" \
+            -PupdateRepo="$GITHUB_REPOSITORY"
+          mkdir -p ../../out && cp app/build/release-apks/*.apk ../../out/
+          ls -la ../../out
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@v4
@@ -198,10 +214,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.build.outputs.version }}
         run: |
-          TAG="android-v${VERSION}-build.${GITHUB_RUN_NUMBER}"
+          TAG="android-v${VERSION}"
           gh release create "$TAG" out/*.apk -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
-            --title "Jam for Android ${VERSION} (build ${GITHUB_RUN_NUMBER})" \
-            --notes "Jam for Android. On your phone, download Jam-Android-${VERSION}.apk (the -x86_64 one is for emulators) and open it to install. Updates install over the previous version and keep your logins."
+            --title "Jam for Android ${VERSION}" \
+            --notes "Jam for Android: Spotify (Orpheon's app, with its extensions) and YouTube Music mode (Settings ▸ Jam). On your phone, download Jam-Android-${VERSION}.apk (the -x86_64 one is for emulators) and open it to install. Updates install over the previous version and keep your logins; later ones are offered inside the app. Spotify mode is [Orpheon](https://github.com/kota-zo/Orpheon) (GPL-3.0) by kota-zo."
 
   smoke-test:
     needs: [build, release]
@@ -239,4 +255,4 @@ jobs:
           VERSION: ${{ needs.build.outputs.version }}
         run: |
           cd shots && zip -qr ../smoke-test.zip . && cd ..
-          gh release upload "android-v${VERSION}-build.${GITHUB_RUN_NUMBER}" smoke-test.zip --clobber -R "$GITHUB_REPOSITORY"
+          gh release upload "android-v${VERSION}" smoke-test.zip --clobber -R "$GITHUB_REPOSITORY"

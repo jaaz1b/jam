@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Emulator test for Jam for Android: the web sources, then YouTube Music (the engine): its home
-# screen, a song played from a music.youtube.com link, and that the song keeps playing with the app
-# in the background and the screen off. Screenshots, the engine's log and logcat go to <out dir>.
-# Fails only if Jam crashes. Usage: smoke.sh <apk> <output dir>
+# Emulator test for Jam for Android 3 (Orpheon's app with YouTube Music mode): Spotify mode's cold
+# start (timed) and first screen; then YouTube Music mode, switched on the way its setting does it:
+# its home screen, a song played from a music.youtube.com link, that it keeps playing with the app
+# in the background and the screen off, and its downloads played offline. Screenshots, start times,
+# the engine's log and logcat go to <out dir>. Fails only if Jam crashes. Usage: smoke.sh <apk> <out dir>
 set -u
-APK="$1"; OUT="$2"; PKG=app.jam.android; ACT=app.jam.android.MainActivity
+APK="$1"; OUT="$2"; PKG=app.jam.android; ACT=app.jam.android.MainActivity; LAUNCHER=app.myspoti.MainActivity
 SONG="${SMOKE_SONG:-dQw4w9WgXcQ}"
 mkdir -p "$OUT"
 adb wait-for-device
@@ -14,13 +15,37 @@ shot() { adb exec-out screencap -p > "$OUT/$1.png"; }
 summary() { echo "$*" | tee -a "$OUT/summary.txt"; }
 summary "WebView: $(adb shell dumpsys webviewupdate | grep -m1 -oE 'Current WebView package[^)]*\)')"
 
-timeout 90 adb shell am start -W -n "$PKG/$ACT"
-sleep 25; shot 01-octave
-adb shell am start -n "$PKG/$ACT" --es source monochrome; sleep 20; shot 02-monochrome
+# Cold starts of the launcher (am start -W: until the first frame), median of five, after one
+# warm-up launch (the first run after install also compiles the baseline profile's code).
+cold() { # cold <label>
+  local times=()
+  timeout 90 adb shell am start -W -n "$PKG/$LAUNCHER" >/dev/null 2>&1; sleep 6
+  for i in 1 2 3 4 5; do
+    adb shell am force-stop "$PKG"; sleep 3
+    t=$(timeout 90 adb shell am start -W -n "$PKG/$LAUNCHER" 2>/dev/null | tr -d '\r' | awk -F': ' '/TotalTime/{print $2}')
+    times+=("${t:-0}"); sleep 5
+  done
+  summary "Cold start, $1 (ms, launcher to first frame): ${times[*]} → median $(printf '%s\n' "${times[@]}" | sort -n | sed -n 3p)"
+}
+
+# 1. Spotify mode, the default: Orpheon's first screen.
+cold "Spotify mode"
+sleep 8; shot 01-spotify-first-screen
+adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui-spotify.xml" >/dev/null 2>&1
+
+# 2. YouTube Music mode, as Settings ▸ YouTube Music mode leaves it (JamMode: jam_mode.xml, then a
+#    restart). The launcher must hand over to YouTube Music.
+adb shell am force-stop "$PKG"
+timeout 30 adb root </dev/null >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
+printf "<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <boolean name=\"ytm\" value=\"true\" />\n</map>\n" > "$OUT/jam_mode.xml"
+adb push "$OUT/jam_mode.xml" /data/local/tmp/jam_mode.xml >/dev/null
+adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam_mode.xml $D/shared_prefs/jam_mode.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam_mode.xml; chmod 660 $D/shared_prefs/jam_mode.xml; restorecon -R $D/shared_prefs'
+cold "YouTube Music mode (launcher → YouTube Music)"
+summary "On screen in YouTube Music mode: $(adb shell dumpsys activity activities | grep -m1 -oE 'topResumedActivity=[^ ]+ [^ ]+ [^ ]+' )"
+summary "Spotify mode's entry points in YouTube Music mode: $(adb shell pm dump $PKG | grep -A12 'disabledComponents:' | grep -cE 'PlaybackService|MediaButtonReceiver|NowPlayingWidget|WearLinkService') turned off (of 4)"
 
 # YouTube Music: the engine's UI, on the phone layout.
-adb shell am start -n "$PKG/$ACT" --es source ytm
-sleep 40; shot 03-ytm-home
+sleep 30; shot 03-ytm-home
 adb shell input swipe 540 1700 540 700 300; sleep 3; shot 04-ytm-home-scrolled
 
 # Play a song from a link, the way a shared link opens Jam.
@@ -39,29 +64,13 @@ adb shell input keyevent KEYCODE_WAKEUP; sleep 2
 timeout 10 adb shell wm dismiss-keyguard </dev/null 2>/dev/null; sleep 2
 adb shell cmd statusbar expand-notifications; sleep 3; shot 06-notifications
 adb shell cmd statusbar collapse; sleep 1
-timeout 60 adb shell am start -W -n "$PKG/$ACT"; sleep 4; shot 07-back-in-app
+timeout 60 adb shell am start -W -n "$PKG/$LAUNCHER"; sleep 4; shot 07-back-in-app
 
 JUID=$(adb shell stat -c %u /data/data/$PKG 2>/dev/null | tr -d '\r')
 summary "Jam pid after 55s in background: ${PID:-not running}"
 summary "Jam audio players:"; grep -E "u/pid:${JUID:-x}/" "$OUT/audio.txt" | grep -oE "state:[a-z]+" | sort | uniq -c | tee -a "$OUT/summary.txt"
 summary "Jam media session:"; awk '/app.jam.android/{f=1} f&&/state=PlaybackState/{print; exit}' "$OUT/media_session.txt" | cut -c1-160 | tee -a "$OUT/summary.txt"
 summary "Notification title: $(grep -A40 'pkg=app.jam.android' "$OUT/notification.txt" | grep -m1 -oE 'android.title=[^)]*' )"
-
-# Jam's settings page, through the toolbar button.
-adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui.xml "$OUT/ui.xml" >/dev/null 2>&1
-TAP=$(python3 - "$OUT/ui.xml" <<'PY'
-import re, sys
-try: x = open(sys.argv[1]).read()
-except Exception: sys.exit()
-m = re.search(r'content-desc="Settings"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', x)
-if m:
-    a, b, c, d = map(int, m.groups()); print((a + c) // 2, (b + d) // 2)
-PY
-)
-if [ -n "$TAP" ]; then
-  adb shell input tap $TAP; sleep 4; shot 08-settings
-  adb shell input keyevent BACK; sleep 2
-fi
 
 # More of YouTube Music, opened from links: an album, an artist and a playlist.
 n=9
@@ -146,73 +155,6 @@ if tap Download last; then
   sleep 10; shot "$(printf %02d $n)-dl-offline-playlist"; n=$((n+1))
   adb shell cmd connectivity airplane-mode disable; adb shell svc wifi enable; adb shell svc data enable; sleep 8
 fi
-
-# Offline web app (what Octave relies on): a test site with a service worker, served from this
-# machine at http://localhost:8000 (adb reverse), opened as a Jam source marked "works offline",
-# then opened again with its server gone. It should still load, from the service worker.
-python3 -m http.server 8000 --directory "$(dirname "$0")" </dev/null >/dev/null 2>&1 &
-SERVER=$!
-adb shell am force-stop "$PKG"
-timeout 30 adb root </dev/null >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
-adb reverse tcp:8000 tcp:8000 >/dev/null
-python3 - > "$OUT/jam-offline.xml" <<'PY'
-import json
-from xml.sax.saxutils import escape
-s = {"customSources": [{"id": "c_offlinetest", "name": "Offline test", "url": "http://localhost:8000/offline-pwa/",
-                        "color": "#22c55e", "desktopSite": False, "offlineApp": True, "extraDomains": []}],
-     "defaultSource": "c_offlinetest", "openLastSource": False}
-print("<?xml version='1.0' encoding='utf-8' standalone='yes' ?>\n<map>\n    <string name=\"settings\">" + escape(json.dumps(s), {'"': "&quot;"}) + "</string>\n</map>")
-PY
-adb push "$OUT/jam-offline.xml" /data/local/tmp/jam.xml >/dev/null
-adb shell 'D=/data/data/app.jam.android; U=$(stat -c %u $D); mkdir -p $D/shared_prefs; cp /data/local/tmp/jam.xml $D/shared_prefs/jam.xml; chown $U:$U $D/shared_prefs $D/shared_prefs/jam.xml; chmod 660 $D/shared_prefs/jam.xml; restorecon -R $D/shared_prefs'
-timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
-sleep 15; shot "$(printf %02d $n)-offline-app-online"; n=$((n+1))
-kill "$SERVER" 2>/dev/null; sleep 1
-adb shell am force-stop "$PKG"
-timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
-sleep 12; shot "$(printf %02d $n)-offline-app-server-gone"; n=$((n+1))
-# And with the phone offline, the way Octave is used.
-adb shell am force-stop "$PKG"
-adb shell cmd connectivity airplane-mode enable; adb shell svc wifi disable; adb shell svc data disable; sleep 6
-timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null
-sleep 14; shot "$(printf %02d $n)-offline-app-airplane"; n=$((n+1))
-adb shell cmd connectivity airplane-mode disable; adb shell svc wifi enable; adb shell svc data enable; sleep 4
-adb shell "cat /data/data/$PKG/shared_prefs/jam.xml" 2>/dev/null > "$OUT/jam-prefs.xml"
-python3 - "$OUT/jam-prefs.xml" <<'PY' | tee -a "$OUT/summary.txt"
-import html, json, re, sys
-x = open(sys.argv[1]).read()
-for key in ('secret.offline.c_offlinetest', 'secret.offlinelog.c_offlinetest'):
-    m = re.search(r'name="' + re.escape(key) + r'">([^<]*)<', x)
-    if not m: print(key + ': (none)'); continue
-    v = json.loads(html.unescape(m.group(1)))
-    if isinstance(v, list): print('Offline web app events: ' + ' | '.join(e.get('ev', '') + (' ' + e.get('d', '')[:60] if e.get('d') else '') for e in v[-14:]))
-    else: print('Offline web app status: why=%s controlled=%s regs=%d error=%s' % (v.get('why'), v.get('controlled'), len(v.get('registrations') or []), (v.get('error') or '')[:120]))
-PY
-
-# Saved state (the save button for web apps that work offline): save the test site, then check it
-# opens from the save without asking the server for anything, and that the switch goes back live.
-python3 "$(dirname "$0")/serve.py" 8000 </dev/null >/dev/null 2>"$OUT/server.log" &
-SERVER=$!
-adb reverse tcp:8000 tcp:8000 >/dev/null
-adb shell am force-stop "$PKG"
-timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null; sleep 12
-shot "$(printf %02d $n)-saved-live"; n=$((n+1))
-if tap "Saved state"; then
-  sleep 2; shot "$(printf %02d $n)-saved-dialog"; n=$((n+1))
-  tap "Save now" && sleep 2 && tap "Save" && sleep 30
-  shot "$(printf %02d $n)-saved-after-restart"; n=$((n+1))
-  BEFORE=$(grep -c 'GET /offline-pwa' "$OUT/server.log")
-  adb shell am force-stop "$PKG"; timeout 60 adb shell am start -W -n "$PKG/$ACT" >/dev/null; sleep 14
-  shot "$(printf %02d $n)-saved-reopened"; n=$((n+1))
-  AFTER=$(grep -c 'GET /offline-pwa' "$OUT/server.log")
-  adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1; adb pull /sdcard/ui.xml "$OUT/ui-saved.xml" >/dev/null 2>&1
-  summary "Saved state: requests to the site while it was open: $((AFTER - BEFORE)); page says: $(grep -oE 'Served with the service worker[^"]*' "$OUT/ui-saved.xml" | head -1); chip: $(grep -oE 'Offline test · Saved' "$OUT/ui-saved.xml" | head -1); $(grep -oE 'Cover: [a-z]+' "$OUT/ui-saved.xml" | head -1) (kept by Jam: $(adb shell "ls /data/data/$PKG/files/covers 2>/dev/null | wc -l" | tr -d '\r'))"
-  # Back to the live site with the switch.
-  tap "Saved state, on" && sleep 2 && tap "Open my saved state" last && sleep 12
-  shot "$(printf %02d $n)-saved-switched-live"; n=$((n+1))
-  summary "Live again: requests to the site: $(( $(grep -c 'GET /offline-pwa' "$OUT/server.log") - AFTER ))"
-fi
-kill "$SERVER" 2>/dev/null
 
 # Logs: the engine's own (limusic.log) and logcat.
 timeout 30 adb root >/dev/null 2>&1; sleep 3; timeout 60 adb wait-for-device
