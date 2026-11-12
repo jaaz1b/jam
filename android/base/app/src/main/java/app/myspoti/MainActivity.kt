@@ -111,6 +111,7 @@ class MainActivity : AppCompatActivity() {
 
     /** Every finger down on the window: the lyrics keep the screen on for a while after the last one. */
     override fun dispatchTouchEvent(ev: android.view.MotionEvent): Boolean {
+        if (jamYtm) return super.dispatchTouchEvent(ev)
         if (ev.actionMasked == android.view.MotionEvent.ACTION_DOWN) com.music.spotui.ui.components.UserTouch.touched()
         return super.dispatchTouchEvent(ev)
     }
@@ -340,6 +341,7 @@ class MainActivity : AppCompatActivity() {
     // Leaving the app (Home, recents) while a music video plays: it goes on in a small window.
     override fun onUserLeaveHint() {
         super.onUserLeaveHint()
+        if (jamYtm) return
         val mv = com.music.spotui.video.MusicVideoController
         if (!com.music.spotui.di.SongPlayer.isPlaying() || isInPictureInPictureMode) return
         if (!com.music.spotui.data.preferences.MusicVideoPref.on || !mv.on.value || mv.player == null) {
@@ -363,6 +365,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
         super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        if (jamYtm) return
         inPip = isInPictureInPictureMode
         if (!pipSong) com.music.spotui.video.MusicVideoController.inPip.value = isInPictureInPictureMode
         if (isInPictureInPictureMode && pipSong) {
@@ -384,11 +387,13 @@ class MainActivity : AppCompatActivity() {
 
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
+        if (jamYtm) return
         handle(intent)
     }
 
     // The clip player follows the app on screen: paused with its side jobs in the background.
     override fun onStart() {
+        if (jamYtm) { super.onStart(); return }
         // Dev builds only: it woke two threads every half second while the app was on screen, for a
         // freeze report no one using the app reads (the beta too: "checks that run all the time for nothing").
         if (app.myspoti.engine.BuildConfig.DEBUG) app.myspoti.host.android.MainThreadWatch.start()
@@ -406,6 +411,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStop() {
         super.onStop()
+        if (jamYtm) return
         // The sign-in is only in memory until the WebView saves it: leaving the app (and being swiped away) must not lose it.
         MyspotiRuntime.host.flushCookies()
         app.myspoti.host.android.MainThreadWatch.stop()
@@ -631,6 +637,7 @@ class MainActivity : AppCompatActivity() {
      */
     override fun onResume() {
         super.onResume()
+        if (jamYtm) return
         if (!showingLogin) return
         lifecycleScope.launch {
             if (MyspotiRuntime.awaitSignedIn(1_500)) {

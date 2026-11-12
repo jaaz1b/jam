@@ -46,7 +46,8 @@ object JamMode {
     fun openYtmInstead(activity: Activity): Boolean {
         if (!ytm(activity)) return false
         activity.startActivity(Intent(activity, MainActivity::class.java).apply {
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            // NO_USER_ACTION: the hand-over is not the user leaving that activity (no onUserLeaveHint).
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_NO_USER_ACTION)
             activity.intent?.data?.takeIf { it.host == "music.youtube.com" }?.let { data = it; action = Intent.ACTION_VIEW }
         })
         activity.overridePendingTransition(0, 0)

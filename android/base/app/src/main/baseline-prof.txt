@@ -1,0 +1,21 @@
+# Jam: the app's own Baseline Profile. The code on the way to the first screen (and the screens
+# right after it) is compiled ahead of time when the app is installed, instead of running
+# interpreted, then JIT-compiled, on the first launches. profileinstaller (already a dependency)
+# installs it on sideloaded builds. Wildcards: AGP expands them against the app's dex, after R8.
+#
+# The app and its UI (Compose screens, the player, the data layer).
+HSPLcom/music/spotui/**->**(**)**
+Lcom/music/spotui/**;
+# Start-up: the Application, MainActivity, the hidden Web Player runtime, the energy settings.
+HSPLapp/myspoti/*->**(**)**
+Lapp/myspoti/*;
+HSPLapp/myspoti/host/android/**->**(**)**
+Lapp/myspoti/host/android/**;
+HSPLapp/myspoti/power/**->**(**)**
+Lapp/myspoti/power/**;
+# The account API and the extensions' registry, both read before the first screen.
+HSPLapp/myspoti/api/**->**(**)**
+HSPLapp/myspoti/extensions/**->**(**)**
+# What Jam adds (the mode, Discord, YouTube Music mode's Android side).
+HSPLapp/jam/**->**(**)**
+Lapp/jam/**;
