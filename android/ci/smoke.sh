@@ -3,9 +3,11 @@
 # start (timed) and first screen; then YouTube Music mode, switched on the way its setting does it:
 # its home screen, a song played from a music.youtube.com link, that it keeps playing with the app
 # in the background and the screen off, and its downloads played offline. Screenshots, start times,
-# the engine's log and logcat go to <out dir>. Fails only if Jam crashes. Usage: smoke.sh <apk> <out dir>
+# the engine's log and logcat go to <out dir>. Fails only if Jam crashes. With a third APK (the same
+# build without the app's Baseline Profile), ends with a speed comparison of the two.
+# Usage: smoke.sh <apk> <out dir> [comparison apk]
 set -u
-APK="$1"; OUT="$2"; PKG=app.jam.android; ACT=app.jam.android.MainActivity; LAUNCHER=app.myspoti.MainActivity
+APK="$1"; OUT="$2"; AB_APK="${3:-}"; PKG=app.jam.android; ACT=app.jam.android.MainActivity; LAUNCHER=app.myspoti.MainActivity
 SONG="${SMOKE_SONG:-dQw4w9WgXcQ}"
 mkdir -p "$OUT"
 adb wait-for-device
@@ -77,15 +79,16 @@ adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1 && adb pull /sdcard/ui
 SWITCHED=""
 if tap "Get started"; then
   sleep 4; shot 02a-spotify-setup
-  tap "~No account:.*" && sleep 1 && tap Continue && sleep 4
+  tap None && sleep 2 && shot 02a-spotify-none && tap Continue && sleep 4
   for step in 1 2 3 4 5 6; do
     shot "02b-spotify-setup-$step"
-    tap "~(Continue|Next|Skip|Not now|Later|Done|Finish|Start listening|Allow)" last || break
+    tap "~(Continue|Next|Skip|Skip to Home|Not now|Later|Done|Finish|Start listening|Allow)" last || break
     sleep 4
   done
   sleep 6; shot 02c-spotify-home
   # The profile menu (the avatar), then Settings; the Classic look's About tab holds the Jam rows.
-  if tap "~.*(profile|account|menu|avatar).*" || true; then sleep 3; fi
+  # Settings: in the More tab (or the profile menu).
+  tap More last || tap "~.*(profile|account|avatar).*" || true; sleep 3; shot 02c-spotify-more
   if tap Settings; then
     sleep 4; shot 02d-spotify-settings
     tap About; sleep 2
@@ -201,9 +204,31 @@ adb logcat -d -v time > "$OUT/logcat-full.txt"
 grep -iE "AndroidRuntime|FATAL|panicked|RustStdoutStderr|Tauri|JamPlugin|JamPlayback|mpv|chromium.*CONSOLE" "$OUT/logcat-full.txt" | tail -800 > "$OUT/logcat.txt"
 summary "Engine log (last two app starts only): $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'downloads: downloaded video_id') downloaded, $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'download failed') failed, played from a download $(cat "$OUT"/limusic.log* 2>/dev/null | grep -c 'playing the downloaded file') times"
 cat "$OUT"/limusic.log* 2>/dev/null | grep -E 'download' | tail -40 > "$OUT/downloads-log.txt"
+# Speed: the app with and without its own Baseline Profile, the same build otherwise, alternated on
+# this emulator. Each: installed fresh, launched once (its profiles installed), compiled the way a
+# phone does overnight (speed-profile), then five cold starts.
+if [ -n "$AB_APK" ] && [ -f "$AB_APK" ]; then
+  ab() { # ab <apk> <label>
+    adb uninstall "$PKG" >/dev/null 2>&1; adb install -r -g "$1" >/dev/null 2>&1 || { summary "install failed: $2"; return; }
+    timeout 90 adb shell am start -W -n "$PKG/$LAUNCHER" >/dev/null 2>&1; sleep 12
+    adb shell am broadcast -a androidx.profileinstaller.action.INSTALL_PROFILE "$PKG/androidx.profileinstaller.ProfileInstallReceiver" >/dev/null 2>&1; sleep 3
+    adb shell cmd package compile -f -m speed-profile "$PKG" >/dev/null 2>&1
+    local times=()
+    for i in 1 2 3 4 5; do
+      adb shell am force-stop "$PKG"; sleep 3
+      t=$(timeout 90 adb shell am start -W -n "$PKG/$LAUNCHER" 2>/dev/null | tr -d '\r' | awk -F': ' '/TotalTime/{print $2}')
+      times+=("${t:-0}"); sleep 4
+    done
+    echo "$2 ${times[*]}" >> "$OUT/speed-ab.txt"
+  }
+  for round in 1 2; do ab "$AB_APK" "without"; ab "$APK" "with"; done
+  med() { grep "^$1 " "$OUT/speed-ab.txt" | cut -d' ' -f2- | tr ' ' '\n' | grep -v '^0$' | sort -n | awk '{a[NR]=$1} END{print (NR%2 ? a[(NR+1)/2] : int((a[NR/2]+a[NR/2+1])/2))}'; }
+  summary "Speed, cold start to first frame after the overnight compile (ms, median of 10): without the app's Baseline Profile $(med without), with it $(med with)"
+  adb logcat -d -v time > "$OUT/logcat-ab.txt"
+fi
 cat "$OUT/summary.txt"
 # Jam's own crashes only: uiautomator (the test's tapping tool) sometimes dies on its own.
-if grep -A2 "FATAL EXCEPTION" "$OUT/logcat-full.txt" | grep -q "Process: $PKG" || grep -q "panicked at" "$OUT/logcat-full.txt"; then
-  echo "Jam crashed:"; grep -B2 -A40 -E "FATAL EXCEPTION|panicked at" "$OUT/logcat-full.txt" | head -100; exit 1
+if cat "$OUT/logcat-full.txt" "$OUT/logcat-ab.txt" 2>/dev/null | grep -A2 "FATAL EXCEPTION" | grep -q "Process: $PKG" || grep -q "panicked at" "$OUT/logcat-full.txt"; then
+  echo "Jam crashed:"; cat "$OUT/logcat-full.txt" "$OUT/logcat-ab.txt" 2>/dev/null | grep -B2 -A40 -E "FATAL EXCEPTION|panicked at" | head -100; exit 1
 fi
 echo "smoke test finished"

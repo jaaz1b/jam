@@ -201,6 +201,25 @@ jobs:
           name: jam-android-apk
           path: out/*.apk
 
+      # For the emulator test's speed comparison only (not released): the same app without its own
+      # Baseline Profile (android/base/app/src/main/baseline-prof.txt).
+      - name: Comparison build without the app's Baseline Profile
+        run: |
+          cd android/base
+          rm app/src/main/baseline-prof.txt
+          ./gradlew :app:assembleRelease \
+            -PappVersionName="${{ steps.apk.outputs.version }}" \
+            -PappVersionCode="$((GITHUB_RUN_NUMBER + 100))" \
+            -PupdateRepo="$GITHUB_REPOSITORY" \
+            -PjamStartupTrace
+          mkdir -p ../../ab && cp "$(find app/build/outputs/apk/release -name '*x86_64*.apk' | head -1)" ../../ab/no-baseline-profile-x86_64.apk
+          git checkout app/src/main/baseline-prof.txt
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jam-android-ab
+          path: ab/*.apk
+
   release:
     needs: build
     runs-on: ubuntu-latest
@@ -223,7 +242,7 @@ jobs:
   smoke-test:
     needs: [build, release]
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -231,6 +250,11 @@ jobs:
         with:
           name: jam-android-apk
           path: out
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: jam-android-ab
+          path: ab
 
       - name: Enable KVM
         run: |
@@ -247,7 +271,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-boot-anim -camera-back none -no-snapshot
-          script: bash android/ci/smoke.sh "$(ls out/*-x86_64.apk | head -1)" shots
+          script: bash android/ci/smoke.sh "$(ls out/*-x86_64.apk | head -1)" shots ab/no-baseline-profile-x86_64.apk
 
       - name: Attach smoke-test results to the release
         if: always()
