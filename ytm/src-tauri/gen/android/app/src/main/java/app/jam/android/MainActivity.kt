@@ -223,7 +223,7 @@ class MainActivity : TauriActivity() {
             wanted != null && Sources.exists(wanted) -> wanted
             Prefs.bool("openLastSource") && Sources.exists(Prefs.str("lastSource")) -> Prefs.str("lastSource")
             Sources.exists(Prefs.str("defaultSource")) -> Prefs.str("defaultSource")
-            else -> "octave"
+            else -> Sources.YTM
         }
         // Jam 2.2's whole-profile copies of saved states go, before any page opens (SavedState.kt).
         if (profilesSupported) SavedState.cleanUp()
@@ -301,7 +301,7 @@ class MainActivity : TauriActivity() {
 
     /** Theater mode hides Jam's bar too (JamPlugin.setFullscreen). */
     fun setChromeHidden(hidden: Boolean) {
-        bar.visibility = if (hidden) View.GONE else View.VISIBLE
+        bar.visibility = View.GONE // Jam 3: never shown (buildUi)
         progress.visibility = if (hidden) View.GONE else progress.visibility
     }
 
@@ -392,6 +392,8 @@ class MainActivity : TauriActivity() {
         })
         bar.addView(iconButton(R.drawable.ic_settings, "Settings") { startActivity(Intent(this, SettingsActivity::class.java)) })
         root.addView(bar, LinearLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT))
+        // Jam 3: YouTube Music only, full screen; its Settings (Jam ▸ Jam settings) reach the rest.
+        bar.visibility = View.GONE
 
         progress = ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal).apply {
             max = 100
@@ -485,7 +487,7 @@ class MainActivity : TauriActivity() {
             if (prev != id && Player.current?.sourceId != Sources.YTM) Player.clear(this)
             val e = engineView
             if (e != null) { e.visibility = View.VISIBLE; e.requestFocus() } else showEngineLoading()
-            progress.visibility = View.INVISIBLE
+            progress.visibility = View.GONE
             renderChips()
             updateEngineVisibility()
             return
@@ -537,7 +539,7 @@ class MainActivity : TauriActivity() {
             if (s == null || home != s.url + s.desktopSite) discard(id)
         }
         val a = active
-        if (a == null || !Sources.exists(a)) { active = null; switchSource(Prefs.str("defaultSource").takeIf { Sources.exists(it) } ?: "octave") }
+        if (a == null || !Sources.exists(a)) { active = null; switchSource(Prefs.str("defaultSource").takeIf { Sources.exists(it) } ?: Sources.YTM) }
         else if (a != Sources.YTM && views[a] == null) { active = null; switchSource(a) }
         else renderChips()
     }

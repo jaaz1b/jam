@@ -38,7 +38,10 @@
         android:banner="@drawable/tv_banner"
         android:supportsRtl="true"
         android:theme="@style/Theme.Orpheon"
-        android:usesCleartextTraffic="false">
+        android:usesCleartextTraffic="false"
+        android:networkSecurityConfig="@xml/network_security_config">
+        <!-- Jam: network_security_config (YouTube Music mode's) allows plain http to this phone only
+             (127.0.0.1, the engine's loopback audio/video proxies); everything else stays https. -->
         <!-- Samsung DeX: the app keeps running (and playing) when the window moves to or from DeX. -->
         <meta-data android:name="com.samsung.android.keepalive.density" android:value="true" />
         <meta-data android:name="com.samsung.android.multidisplay.keep_process_alive" android:value="true" />

@@ -234,6 +234,13 @@ class SettingsActivity : AppCompatActivity() {
 
         @JavascriptInterface fun openExternal(url: String) { if (url.startsWith("https://")) main.post { openExternal(url) } }
         @JavascriptInterface fun close() { main.post { finish() } }
-        @JavascriptInterface fun version(): String = BuildConfig.VERSION_NAME + " (" + BuildConfig.VERSION_CODE + ")"
+        // The app's version, not BuildConfig's: built as a library of the Jam app, this has none.
+        @JavascriptInterface fun version(): String = runCatching {
+            val p = packageManager.getPackageInfo(packageName, 0)
+            p.versionName + " (" + (if (android.os.Build.VERSION.SDK_INT >= 28) p.longVersionCode else @Suppress("DEPRECATION") p.versionCode.toLong()) + ")"
+        }.getOrDefault("")
+        /** Jam 3: the app's mode (JamMode). On: YouTube Music; off: Spotify. */
+        @JavascriptInterface fun ytmMode(): Boolean = JamMode.ytm(this@SettingsActivity)
+        @JavascriptInterface fun setYtmMode(on: Boolean) { main.post { JamMode.switchTo(this@SettingsActivity, on) } }
     }
 }

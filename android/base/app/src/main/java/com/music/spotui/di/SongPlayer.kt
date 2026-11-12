@@ -637,7 +637,7 @@ object SongPlayer {
         val title = if (ad) Graph.app.getString(app.myspoti.engine.R.string.ad_playing) else song?.title ?: st?.title?.value.orEmpty()
         val artist = if (ad) "" else song?.singer ?: st?.singer?.value.orEmpty()
         val cover = if (ad) null else song?.coverUri ?: st?.coverUri?.value
-        PlaybackService.update(Graph.app, NowPlayingInfo(
+        val info = NowPlayingInfo(
             id = if (ad) "spotify:ad" else _nowPlaying.value.uri,
             title = title,
             artist = artist,
@@ -653,7 +653,10 @@ object SongPlayer {
             shuffle = isShuffleOn(),
             episode = !ad && isEpisode,
             streamed = streamedNow(),
-        ))
+        )
+        PlaybackService.update(Graph.app, info)
+        // Jam: Discord Rich Presence, as in YouTube Music mode (app/jam/JamPresence.kt).
+        app.jam.JamPresence.update(info)
         com.music.spotui.widget.NowPlayingWidget.show(Graph.app,
             title = title,
             artist = artist,

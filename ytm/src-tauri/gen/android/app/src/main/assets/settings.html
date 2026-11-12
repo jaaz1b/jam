@@ -171,10 +171,18 @@
 <body>
 <header>
   <button class="x back" id="closeBtn" aria-label="Back">←</button>
-  <div><h1>Settings</h1><p>Sources, your Discord status, and app options.</p></div>
+  <div><h1>Jam settings</h1><p>Your Discord status and the app's mode.</p></div>
 </header>
 
 <main>
+  <h2 id="sec-mode">Mode</h2>
+  <div class="card">
+    <div class="row"><span class="name">YouTube Music mode</span><label class="switch"><input type="checkbox" id="ytmMode"><span class="slider"></span></label>
+      <span class="desc">Jam plays YouTube Music instead of Spotify. Jam restarts in the mode you pick; your Discord status works in both.</span></div>
+  </div>
+
+  <!-- Jam 3: YouTube Music only. The Sources section stays in the page (its script uses it), hidden. -->
+  <div hidden>
   <h2 id="sec-sources">Sources</h2>
   <div class="card">
     <div class="srclist" id="srcList"></div>
@@ -194,6 +202,8 @@
         <option value="-1">Until I close Jam</option>
       </select>
       <span class="desc">Switching back within this time is instant. Shorter uses less memory and battery. The service you switch away from is paused.</span></div>
+  </div>
+
   </div>
 
   <h2 id="sec-discord">Discord</h2>
@@ -340,7 +350,7 @@
   <h2>About</h2>
   <div class="card">
     <div class="row stack"><span class="name">Jam <span id="ver"></span></span>
-      <span class="desc">Free software under the GPL-3.0. Discord sign-in works like <a data-href="https://github.com/FrancescoGrazioso/Meld">Meld</a>'s. <a data-href="https://github.com/jaaz1b/jam">Source code</a></span></div>
+      <span class="desc">Free software under the GPL-3.0. Spotify mode is <a data-href="https://github.com/kota-zo/Orpheon">Orpheon</a> (formerly <a data-href="https://github.com/kota-zo/myspoti">Myspoti</a>) by kota-zo, rebranded as Jam. Discord sign-in works like <a data-href="https://github.com/FrancescoGrazioso/Meld">Meld</a>'s. <a data-href="https://github.com/jaaz1b/jam">Source code</a></span></div>
   </div>
   <div style="height:30px"></div>
 </main>
@@ -666,6 +676,8 @@
   showStatus(call('getStatus'));
   renderPreview(call('getPreview'));
   renderSources(call('getSources'));
+  // Jam 3: the app's mode. Turning it either way restarts Jam in that mode.
+  { const m = $('ytmMode'); m.checked = !!J.ytmMode(); m.addEventListener('change', () => J.setYtmMode(m.checked)); }
   const section = new URLSearchParams(location.search).get('section');
   if (section) { const el = $('sec-' + section); if (el) el.scrollIntoView({ block: 'start' }); }
 </script>

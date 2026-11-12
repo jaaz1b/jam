@@ -235,6 +235,19 @@ private fun SettingsRoot(navController: NavController, open: (SettingsPage) -> U
             row { ImmersiveGroupRow(stringResource(R.string.settings_section_storage), icon = Icons.Rounded.Storage, chevron = true, onClick = { open(SettingsPage.Storage) }) }
             row { ImmersiveGroupRow(stringResource(R.string.settings_section_app), icon = Icons.Rounded.Info, chevron = true, onClick = { open(SettingsPage.App) }) }
         }
+        // Jam: YouTube Music mode and Discord's presence (app/jam/JamSettings.kt).
+        immersiveGroup("jam") {
+            row {
+                var confirm by remember { mutableStateOf(false) }
+                ImmersiveSwitchRow(stringResource(R.string.jam_ytm_mode_title), checked = false,
+                    onChecked = { if (it) confirm = true }, detail = stringResource(R.string.jam_ytm_mode_detail))
+                app.jam.JamYtmModeConfirm(confirm) { confirm = false }
+            }
+            row {
+                ImmersiveGroupRow(stringResource(R.string.jam_discord_title), detail = stringResource(R.string.jam_discord_detail),
+                    chevron = true, onClick = { app.jam.JamSettings.openDiscord(ctx) })
+            }
+        }
     }
 }
 

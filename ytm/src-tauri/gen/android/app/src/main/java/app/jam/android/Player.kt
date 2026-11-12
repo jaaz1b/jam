@@ -92,6 +92,18 @@ object Player {
 
     fun clear(context: Context) = update(context, null)
 
+    /**
+     * Jam: the Spotify mode's song (SongPlayer, through JamPresence). Its own player has the
+     * notification and the lock screen: this feeds Discord and Settings' preview only.
+     */
+    fun reportSpotify(np: NowPlaying?) {
+        main.post {
+            current = np
+            Discord.onNowPlaying(np)
+            onChanged?.invoke()
+        }
+    }
+
     /** A media button. The engine takes its own (it may be playing with no activity at all). */
     fun control(action: String) {
         main.post {

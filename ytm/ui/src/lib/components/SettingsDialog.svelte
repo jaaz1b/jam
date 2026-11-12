@@ -1,6 +1,9 @@
 <script lang="ts">
 	import { tick, untrack, type Snippet } from 'svelte';
 	import { phone } from '$lib/phone';
+	import { openJamSettings, switchToSpotify } from '$lib/api';
+	/** Jam 3 for Android: this is the Jam app's YouTube Music mode (Settings ▸ Jam reaches the rest). */
+	const jamAndroid = !!(globalThis as any).__TAURI_INTERNALS__?.__jam;
 	import { downloadsEnabled } from '$lib/downloads.svelte';
 	import DownloadSettings from './DownloadSettings.svelte';
 	import { save } from '@tauri-apps/plugin-dialog';
@@ -523,6 +526,25 @@
 						</button>
 					{/each}
 				</div>
+				{#if jamAndroid}
+					<div class="mt-3 flex flex-col gap-0.5 border-t pt-3">
+						<span class="px-3 pb-1 text-[11px] font-semibold tracking-wide text-muted-foreground uppercase">Jam</span>
+						<button
+							onclick={() => openJamSettings()}
+							class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+						>
+							<HugeiconsIcon icon={DiscordIcon} size={17} strokeWidth={2} />
+							<span class="truncate">Discord presence &amp; Jam settings</span>
+						</button>
+						<button
+							onclick={() => switchToSpotify()}
+							class="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm font-medium text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
+						>
+							<HugeiconsIcon icon={LinkSquare02Icon} size={17} strokeWidth={2} />
+							<span class="truncate">Switch to Spotify mode</span>
+						</button>
+					</div>
+				{/if}
 				{#if version}
 					<span class="mt-auto px-3 pb-1 text-[11px] text-muted-foreground">v{version}</span>
 				{/if}

@@ -1317,6 +1317,8 @@ pub fn run() {
             commands::get_local_library,
             commands::add_local_folder,
             commands::pick_local_folder,
+            commands::open_jam_settings,
+            commands::switch_to_spotify,
             commands::remove_local_folder,
             commands::allow_font_file,
             commands::get_artist,

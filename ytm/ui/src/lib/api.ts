@@ -917,6 +917,10 @@ export const getLocalLibrary = () => invoke<LocalLibrary>('get_local_library');
 export const addLocalFolder = (path: string) => invoke<LocalLibrary>('add_local_folder', { path });
 /** Jam for Android: Android's folder chooser (after asking to read audio). `null` if cancelled. */
 export const pickLocalFolder = () => invoke<string | null>('pick_local_folder');
+/** Jam 3 for Android: Jam's own settings (Discord presence, the app's mode). */
+export const openJamSettings = () => invoke<void>('open_jam_settings');
+/** Jam 3 for Android: back to the Jam app's Spotify mode (the app restarts in it). */
+export const switchToSpotify = () => invoke<void>('switch_to_spotify');
 export const removeLocalFolder = (path: string) =>
 	invoke<LocalLibrary>('remove_local_folder', { path });
 

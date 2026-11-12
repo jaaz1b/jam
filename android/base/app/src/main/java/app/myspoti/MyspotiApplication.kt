@@ -21,6 +21,14 @@ import kotlinx.coroutines.launch
 class MyspotiApplication : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Jam: Jam for Android's start-up (its settings, Discord), in both modes: the Discord
+        // presence is shared. In YouTube Music mode nothing of the Spotify side starts (no hidden
+        // Web Player, downloads or extensions): YouTube Music's engine starts with its activity.
+        app.jam.android.JamApp.start(this)
+        if (app.jam.android.JamMode.ytm(this)) {
+            app.jam.android.JamMode.applyEntryPoints(this)
+            return
+        }
         // A crash or a freeze of the last run, back in this run's diagnostic report.
         app.myspoti.host.android.LastExit.install(this)
         app.myspoti.power.EnergySettings.init(this)

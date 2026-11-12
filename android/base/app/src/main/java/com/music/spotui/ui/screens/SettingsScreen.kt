@@ -476,6 +476,24 @@ fun SettingsScreen(navController: NavController) {
             }
             }
             if (tab == 5) {
+            // Jam: YouTube Music mode and Discord's presence (app/jam/JamSettings.kt).
+            Section(R.string.jam_section)
+            var jamYtmConfirm by remember { mutableStateOf(false) }
+            OptionRow(
+                label = stringResource(R.string.jam_ytm_mode_title),
+                detail = stringResource(R.string.jam_ytm_mode_detail),
+                checked = false,
+                onChecked = { if (it) jamYtmConfirm = true },
+            )
+            app.jam.JamYtmModeConfirm(jamYtmConfirm) { jamYtmConfirm = false }
+            Column(
+                Modifier.fillMaxWidth().clickable { app.jam.JamSettings.openDiscord(ctx) }
+                    .padding(horizontal = 20.dp, vertical = 10.dp),
+            ) {
+                Text(stringResource(R.string.jam_discord_title), color = AppText, fontSize = 16.sp)
+                Text(stringResource(R.string.jam_discord_detail), color = AppMuted, fontSize = 12.sp)
+            }
+            Divider()
             Section(R.string.settings_section_app)
             AboutRow()
             // A18: the launch check can be turned off; the manual check below keeps working.

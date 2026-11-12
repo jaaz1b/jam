@@ -267,6 +267,24 @@ class JamPlugin(private val activity: Activity) : Plugin(activity) {
         }
     }
 
+    /** Jam 3: Jam's own settings (Discord, the mode), from YouTube Music's Settings ▸ Jam. */
+    @Command
+    fun openJamSettings(invoke: Invoke) {
+        main.post {
+            activity.startActivity(Intent(activity, SettingsActivity::class.java))
+            invoke.resolve()
+        }
+    }
+
+    /** Jam 3: back to Spotify mode (the Jam app restarts in it). */
+    @Command
+    fun switchToSpotify(invoke: Invoke) {
+        main.post {
+            invoke.resolve()
+            JamMode.switchTo(activity, ytm = false)
+        }
+    }
+
     /** Local music: access to audio files, then Android's folder chooser; answers `{ path }`. */
     @Command
     fun pickMusicFolder(invoke: Invoke) {

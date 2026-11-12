@@ -115,7 +115,17 @@ class MainActivity : AppCompatActivity() {
         return super.dispatchTouchEvent(ev)
     }
 
+    /** Jam: YouTube Music mode is on; this activity only handed over to it (see onCreate). */
+    private var jamYtm = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        // Jam: in YouTube Music mode the launcher opens YouTube Music (JamMode), nothing here.
+        if (app.jam.android.JamMode.openYtmInstead(this)) {
+            jamYtm = true
+            super.onCreate(null)
+            finish()
+            return
+        }
         super.onCreate(savedInstanceState)
         // Edge to edge on every Android version (15+ enforces it, 14 and older do not): the pages draw
         // under the status bar and handle its inset, otherwise a band of the window's colour sits
@@ -405,6 +415,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (jamYtm) { super.onDestroy(); return }
         pipReceiver?.let { runCatching { unregisterReceiver(it) } }
         pipReceiver = null
         // The process-wide WebView lives in this activity's root while attached:

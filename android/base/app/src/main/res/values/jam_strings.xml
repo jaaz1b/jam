@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Jam: the texts of what Jam adds to the app (app/jam/*.kt). English only for now. -->
+<resources>
+    <string name="jam_section">Jam</string>
+    <string name="jam_ytm_mode_title">YouTube Music mode</string>
+    <string name="jam_ytm_mode_detail">Plays YouTube Music in Jam instead of Spotify. Switch back from its Settings, Jam.</string>
+    <string name="jam_ytm_mode_confirm">Jam restarts in YouTube Music mode. What plays now stops. Your Spotify sign-in, downloads and extensions stay here for when you switch back.</string>
+    <string name="jam_ytm_mode_switch">Switch</string>
+    <string name="jam_discord_title">Discord Rich Presence</string>
+    <string name="jam_discord_detail">Shows what you play as your Discord status: sign in, choose the lines and buttons</string>
+</resources>

@@ -2417,6 +2417,36 @@ pub async fn pick_local_folder(app: tauri::AppHandle) -> Result<Option<String>, 
     }
 }
 
+/// Jam 3 (Android): Jam's own settings (Discord presence, the app's mode), from Settings ▸ Jam.
+#[tauri::command]
+pub async fn open_jam_settings(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android::call::<serde_json::Value>(&app, "openJamSettings", serde_json::json!({})).await?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("only on Android".into())
+    }
+}
+
+/// Jam 3 (Android): back to the Jam app's Spotify mode. The app restarts in it.
+#[tauri::command]
+pub async fn switch_to_spotify(app: tauri::AppHandle) -> Result<(), String> {
+    #[cfg(target_os = "android")]
+    {
+        crate::android::call::<serde_json::Value>(&app, "switchToSpotify", serde_json::json!({})).await?;
+        Ok(())
+    }
+    #[cfg(not(target_os = "android"))]
+    {
+        let _ = app;
+        Err("only on Android".into())
+    }
+}
+
 /// Stop watching a folder. Its tracks disappear from the library on the rescan that follows (they
 /// come back untouched if the folder is added again — nothing on disk is modified).
 #[tauri::command]

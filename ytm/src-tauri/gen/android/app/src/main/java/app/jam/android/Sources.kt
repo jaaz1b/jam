@@ -34,13 +34,12 @@ data class Source(
 
 object Sources {
     const val YTM = "ytm"
+    /** Jam 3: see [BUILTIN]. */
+    private const val YTM_ONLY = true
 
+    // Jam 3: the Jam app's YouTube Music mode is YouTube Music only (no Octave, Monochrome or
+    // user-added sources; their saved settings stay, unused).
     private val BUILTIN = listOf(
-        Source("octave", "Octave", "https://music.octavestreaming.com/", listOf("octavestreaming.com"), "#8b5cf6", editableLink = true, offlineApp = true),
-        Source(
-            "monochrome", "Monochrome", "https://monochrome.st/",
-            listOf("monochrome.st", "monochrome.tf", "lossless.wtf", "if-it-runs-ship-it.lol", "last.fm"), "#e8e8ee", editableLink = true,
-        ),
         // The same YouTube Music app as Jam on Windows (Limusic rebuilt into Jam), running natively.
         Source(YTM, "YouTube Music", "https://music.youtube.com/", listOf("music.youtube.com", "youtube.com", "youtu.be"), "#ff0033", engine = true),
     )
@@ -60,7 +59,7 @@ object Sources {
             if (b.editableLink && o.isNotBlank()) b.copy(url = o, customUrl = true, defaultUrl = b.url, domains = b.domains + baseHost(o))
             else b.copy(defaultUrl = b.url)
         }.toMutableList()
-        val custom = Prefs.arr("customSources")
+        val custom = if (YTM_ONLY) org.json.JSONArray() else Prefs.arr("customSources")
         for (i in 0 until custom.length()) {
             val c = custom.optJSONObject(i) ?: continue
             val url = c.optString("url")

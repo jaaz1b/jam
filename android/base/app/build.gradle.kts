@@ -17,16 +17,20 @@ val keystoreProperties = Properties().apply {
 val automixLab = findProperty("automixLab") != null
 
 
-/** The ABIs a release has an APK for, and how they are named in it (UpdateChecker reads the same names). */
-val RELEASE_ABIS = listOf("arm64-v8a", "armeabi-v7a")
-val ABI_NAMES = mapOf("arm64-v8a" to "ARMv8", "armeabi-v7a" to "ARMv7")
+/**
+ * Jam: the ABIs a release has an APK for, and how they are named in it (UpdateChecker reads the same
+ * names): Jam-Android-<version>.apk for phones (64-bit ARM), -x86_64 for emulators. These are the
+ * ABIs YouTube Music mode's engine is built for (Jam for Android before 3.0 shipped the same two).
+ */
+val RELEASE_ABIS = listOf("arm64-v8a", "x86_64")
+val ABI_NAMES = mapOf("arm64-v8a" to "", "x86_64" to "-x86_64")
 /**
  * The first word of a release's APK names (UpdateChecker reads it from BuildConfig.APK_NAME). It
  * follows the app id: Myspoti's own releases (app.myspoti, app.myspoti.stable) are "Myspoti-...",
  * so their update check, which installs only its own package, opens the release page for these
  * instead of trying an APK it cannot install over itself.
  */
-val APK_NAME = "Orpheon"
+val APK_NAME = "Jam-Android"
 
 android {
     testOptions {
@@ -38,16 +42,15 @@ android {
     namespace = "app.myspoti.engine"
     compileSdk = 37
 
-    // Two channels that install side by side: betas ("2.0.0-beta.3") stay "app.orpheon.beta",
-    // signed with the first key, as "Orpheon Beta"; releases are "app.orpheon",
-    // signed with their own key, as "Orpheon". (Provisional ids: the rename from Myspoti.)
-    // Local builds (no version given) are on the beta side, like the phone test builds.
+    // Jam: one app, "app.jam.android". CI gives the version ("3.0.0-build.12", not a beta: no adb
+    // command line, release logs stripped). Local builds (no version given) are on the beta side.
     val version = (findProperty("appVersionName") as String?) ?: "1.0.0"
     // "-beta" as in UpdateChecker.isBeta, one predicate for the app id, the label and the log stripping.
     val beta = findProperty("appVersionName") == null || version.contains("-beta")
     defaultConfig {
-        applicationId = if (automixLab) "app.myspoti.automixlab" else if (beta) "app.orpheon.beta" else "app.orpheon"
-        manifestPlaceholders["appLabel"] = if (automixLab) "Myspoti Mix Lab" else if (beta) "Orpheon Beta" else "Orpheon"
+        // Jam: one channel, Jam for Android's own id, so it installs over Jam 2.x and keeps its data.
+        applicationId = if (automixLab) "app.myspoti.automixlab" else "app.jam.android"
+        manifestPlaceholders["appLabel"] = if (automixLab) "Myspoti Mix Lab" else "Jam"
         // The adb command line (com.music.spotui.cli): betas and debug builds only.
         manifestPlaceholders["cliEnabled"] = beta.toString()
         minSdk = 29
@@ -58,7 +61,7 @@ android {
         // GitHub "owner/repo" whose releases the app checks for updates; empty = off
         // (local builds). CI sets it to the repository it builds.
         // Not in the dev and Mix Lab builds (below): no release carries their app id.
-        buildConfigField("String", "UPDATE_REPO", "\"${if (automixLab) "" else (findProperty("updateRepo") as String?) ?: System.getenv("MYSPOTI_UPDATE_REPO") ?: ""}\"")
+        buildConfigField("String", "UPDATE_REPO", "\"${if (automixLab) "" else (findProperty("updateRepo") as String?) ?: System.getenv("JAM_UPDATE_REPO") ?: ""}\"")
         buildConfigField("String", "APK_NAME", "\"$APK_NAME\"")
         // -Pabis=arm64-v8a: one APK for one phone (the test builds). Without it, the ABI splits below.
         (findProperty("abis") as String?)?.let { ndk { abiFilters += it.split(",") } }
@@ -71,22 +74,24 @@ android {
         buildConfig = true
     }
 
-    // Release key from the CI secrets (env), else keystore/keystore.properties.
-    val envStore = System.getenv("MYSPOTI_KEYSTORE")
-    val hasReleaseKey = envStore != null || keystorePropertiesFile.exists()
-    // A stable release (a version without "-beta", given by CI) is never signed with the debug key:
-    // without the release key the build stops. Local builds (no version) and -PoverDev are not stable releases.
-    val stableRelease = !beta && findProperty("overDev") == null
-    if (stableRelease && !hasReleaseKey && gradle.startParameter.taskNames.any { Regex("(assemble|bundle|package|install)Release").containsMatchIn(it) })
-        throw GradleException("A stable release needs the release key: set MYSPOTI_KEYSTORE (CI) or add keystore/keystore.properties.")
+    // Jam's signing (as Jam for Android 2.x, so updates install over it and keep the logins): the
+    // private key from the CI secrets (JAM_KEYSTORE_*), else keystore/keystore.properties, else the
+    // public key in android/keystore (see its README).
+    val envStore = System.getenv("JAM_KEYSTORE_FILE")
+    val hasReleaseKey = true
     signingConfigs {
         create("release") {
             if (envStore != null) {
                 storeFile = file(envStore)
-                storePassword = System.getenv("MYSPOTI_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("MYSPOTI_KEY_ALIAS")
-                keyPassword = System.getenv("MYSPOTI_KEY_PASSWORD")
-            } else if (keystorePropertiesFile.exists()) {
+                storePassword = System.getenv("JAM_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("JAM_KEY_ALIAS")
+                keyPassword = System.getenv("JAM_KEY_PASSWORD")?.ifEmpty { null } ?: System.getenv("JAM_KEYSTORE_PASSWORD")
+            } else if (!keystorePropertiesFile.exists()) {
+                storeFile = rootProject.file("../keystore/jam-debug.jks")
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            } else {
                 storeFile = rootProject.file("keystore/${keystoreProperties.getProperty("storeFile")}")
                 storePassword = keystoreProperties.getProperty("storePassword")
                 keyAlias = keystoreProperties.getProperty("keyAlias")
@@ -99,7 +104,7 @@ android {
         debug {
             // Installs next to the release apps (own data, own sign-in).
             if (!automixLab) applicationIdSuffix = ".dev"
-            manifestPlaceholders["appLabel"] = if (automixLab) "Myspoti Mix Lab" else "Orpheon dev"
+            manifestPlaceholders["appLabel"] = if (automixLab) "Myspoti Mix Lab" else "Jam dev"
             manifestPlaceholders["cliEnabled"] = "true"
             buildConfigField("String", "UPDATE_REPO", "\"\"")
         }
@@ -111,7 +116,7 @@ android {
             // beta on the test phone without replacing the signed beta installed there.
             if (findProperty("overDev") != null && !automixLab) {
                 applicationIdSuffix = ".dev"
-                manifestPlaceholders["appLabel"] = "Orpheon dev"
+                manifestPlaceholders["appLabel"] = "Jam dev"
                 buildConfigField("String", "UPDATE_REPO", "\"\"")
             }
             // The Mix Lab stays drivable from the CLI in its optimised build, as in its debug one.
@@ -133,10 +138,12 @@ android {
             isEnable = findProperty("abis") == null
             reset()
             include(*RELEASE_ABIS.toTypedArray())
-            isUniversalApk = true
+            isUniversalApk = false
         }
     }
-    packaging { jniLibs { excludes += listOf("lib/x86/**", "lib/x86_64/**") } }
+    // Jam: arm64 phones and x86_64 emulators (the ABIs above). YouTube Music mode's libmpv and the
+    // ONNX runtime both bring the NDK's C++ runtime: one copy.
+    packaging { jniLibs { excludes += listOf("lib/x86/**", "lib/armeabi-v7a/**"); pickFirsts += "**/libc++_shared.so" } }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
@@ -145,6 +152,8 @@ android {
 
 dependencies {
     implementation(project(":host-android"))
+    // Jam: YouTube Music mode (Jam for Android's Tauri app, ytm/build.gradle.kts) and its Discord presence.
+    implementation(project(":ytm"))
     // YouTube Music as the account provider (listen sync, library read, metadata on the user's session).
     implementation(project(":api-ytmusic"))
     // The native engine: the account's audio outside the Web Player page (NativeAudio), behind its setting.
@@ -239,10 +248,9 @@ dependencies {
 }
 /**
  * `./gradlew :app:collectApks` after assembleRelease: the APKs under clear names in
- * build/release-apks/: Orpheon-2.4.0-ARMv8.apk (64-bit phones, almost all of them),
- * Orpheon-2.4.0-ARMv7.apk (32-bit), Orpheon-2.4.0-universal.apk (both) and Orpheon-2.4.0-TV.apk
- * (Android TV: the universal APK, since many TVs run 32-bit apps on a 64-bit chip). Betas are
- * Orpheon-Beta-..., the optimised dev builds Orpheon-dev-...
+ * build/release-apks/: Jam-Android-3.0.0-build.12.apk (64-bit ARM phones and TVs) and
+ * Jam-Android-3.0.0-build.12-x86_64.apk (emulators). Local builds are Jam-Android-Beta-..., the
+ * optimised dev builds Jam-Android-dev-...
  */
 tasks.register("collectApks") {
     mustRunAfter("assembleRelease")
@@ -262,11 +270,10 @@ tasks.register("collectApks") {
             if (!f.exists()) throw GradleException("$name missing: run assembleRelease without -Pabis first")
             f.copyTo(dst.resolve(to), overwrite = true)
         }
+        // Jam: Jam-Android-<version>.apk (phones), Jam-Android-<version>-x86_64.apk (emulators).
         abis.forEach { abi ->
-            copy("app-$abi-release.apk", "$app-$version-${abiNames.getValue(abi)}.apk")
+            copy("app-$abi-release.apk", "$app-$version${abiNames.getValue(abi)}.apk")
         }
-        copy("app-universal-release.apk", "$app-$version-universal.apk")
-        copy("app-universal-release.apk", "$app-$version-TV.apk")
         dst.listFiles()?.sorted()?.forEach { println("${it.name}  ${it.length() / 1024 / 1024} MB") }
     }
 }
