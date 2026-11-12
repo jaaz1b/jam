@@ -66,8 +66,6 @@ android {
         // Jam: the Orpheon release this app is built on (kota-zo/Orpheon@70f323c). Extensions say
         // which Orpheon they need: they are checked against this, not against Jam's own version.
         buildConfigField("String", "ORPHEON_VERSION", "\"1.0.0\"")
-        // Jam: -PjamStartupTrace logs start-up timings (app/jam/JamStartup.kt), for the emulator test.
-        buildConfigField("boolean", "JAM_STARTUP_TRACE", (findProperty("jamStartupTrace") != null).toString())
         // -Pabis=arm64-v8a: one APK for one phone (the test builds). Without it, the ABI splits below.
         (findProperty("abis") as String?)?.let { ndk { abiFilters += it.split(",") } }
         // On-device tests (codecs): ./gradlew connectedDebugAndroidTest

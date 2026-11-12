@@ -128,8 +128,6 @@ class MainActivity : AppCompatActivity() {
             return
         }
         super.onCreate(savedInstanceState)
-        app.jam.JamStartup.mark("MainActivity.onCreate")
-        window.decorView.post { app.jam.JamStartup.mark("MainActivity first frame posted") }
         // Edge to edge on every Android version (15+ enforces it, 14 and older do not): the pages draw
         // under the status bar and handle its inset, otherwise a band of the window's colour sits
         // above their gradient on 14 and older.
