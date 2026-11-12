@@ -1,0 +1,7 @@
+# Orpheon tree (android/base): build outputs and local files
+base/**/build/
+base/.gradle/
+base/.kotlin/
+base/local.properties
+tools/captures/
+__pycache__/
