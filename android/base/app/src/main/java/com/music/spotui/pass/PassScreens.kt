@@ -175,6 +175,8 @@ object PassLinks {
     /** Takes [link] when it is a pass link (true), and puts it up for confirmation when it can be. */
     fun offer(context: android.content.Context, link: String, signedIn: Boolean): Boolean {
         if (!isPassLink(link)) return false
+        // Jam: a computer's code to sign this device in (signed in or not: that is what it is for).
+        app.myspoti.pass.PassOffer.parse(link)?.let { PassTakeLinks.pending.value = it; return true }
         val i = PassInvite.parse(link)
         when {
             i == null -> Toast.makeText(context, R.string.pass_not_invite, Toast.LENGTH_LONG).show()
@@ -191,4 +193,117 @@ fun PassLinkHost() {
     val i by PassLinks.pending.collectAsState()
     // A new link while one is up replaces it (keyed on the invitation: its own Send button).
     i?.let { invite -> androidx.compose.runtime.key(invite) { PassSendConfirm(invite, fromLink = true, onDismiss = { PassLinks.pending.compareAndSet(invite, null) }) } }
+}
+
+/**
+ * Jam: this device (signed in) shows a code for another to take its sign-in, settings and
+ * extensions ([app.myspoti.pass.PassOffer]): a computer whose sign-in Spotify takes, for a phone
+ * whose own sign-in page Spotify refuses. Closed, it stops listening.
+ */
+@Composable
+fun PassOfferDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var code by remember { mutableStateOf<String?>(null) }
+    var failed by remember { mutableStateOf(false) }
+    var done by remember { mutableStateOf<String?>(null) }
+    DisposableEffect(Unit) {
+        val name = android.os.Build.MODEL.orEmpty().ifBlank { "Jam" }
+        val server = runCatching {
+            app.myspoti.pass.PassOfferServer(name, collect = { kotlinx.coroutines.runBlocking { PassAndroid.collect(context.applicationContext) } },
+                onDone = { who -> if (who != null) done = who }).start()
+        }.getOrNull()
+        if (server == null) failed = true else code = server.offer.toText()
+        onDispose { server?.stop() }
+    }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        Column(
+            Modifier.widthIn(max = 440.dp).padding(24.dp).clip(RoundedCornerShape(20.dp)).background(Color(0xFF1C1C1E)).padding(24.dp),
+            horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(14.dp),
+        ) {
+            Text(stringResource(R.string.pass_offer_title), color = Color.White, fontSize = 20.sp, textAlign = TextAlign.Center)
+            when {
+                done != null -> Text(stringResource(R.string.pass_offer_done, done!!), color = Color.White, fontSize = 15.sp, textAlign = TextAlign.Center)
+                failed -> Text(stringResource(R.string.pass_no_network), color = Color(0xFFFF8A80), fontSize = 15.sp, textAlign = TextAlign.Center)
+                else -> {
+                    code?.let { PassQr(it) }
+                    Text(stringResource(R.string.pass_offer_hint), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
+                }
+            }
+            TextButton(onClick = onDismiss) { Text(stringResource(if (done != null) android.R.string.ok else android.R.string.cancel)) }
+        }
+    }
+}
+
+/** Jam: the scanner opens on the code another device shows ([PassOfferDialog]), then [PassTakeConfirm]. */
+@Composable
+fun PassTakeFlow(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var offer by remember { mutableStateOf<app.myspoti.pass.PassOffer?>(null) }
+    LaunchedEffect(Unit) {
+        com.google.mlkit.vision.codescanner.GmsBarcodeScanning.getClient(context).startScan()
+            .addOnSuccessListener { code ->
+                val text = code.rawValue.orEmpty()
+                val o = app.myspoti.pass.PassOffer.parse(text)
+                when {
+                    o != null -> offer = o
+                    PassInvite.parse(text) != null -> { Toast.makeText(context, R.string.pass_take_wrong_code, Toast.LENGTH_LONG).show(); onDismiss() }
+                    else -> { Toast.makeText(context, R.string.pass_not_invite, Toast.LENGTH_LONG).show(); onDismiss() }
+                }
+            }
+            .addOnCanceledListener { onDismiss() }
+            .addOnFailureListener { Toast.makeText(context, R.string.pass_scan_unavailable, Toast.LENGTH_LONG).show(); onDismiss() }
+    }
+    offer?.let { PassTakeConfirm(it, onDismiss) }
+}
+
+/** The yes before taking [o]'s sign-in; then taken, applied, and the app starts again. */
+@Composable
+fun PassTakeConfirm(o: app.myspoti.pass.PassOffer, onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var taking by remember(o) { mutableStateOf(false) }
+    AlertDialog(
+        onDismissRequest = { if (!taking) onDismiss() },
+        title = { Text(stringResource(R.string.pass_take_confirm, o.name.ifBlank { o.host })) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.pass_take_confirm_text))
+                Text("${o.host}:${o.port}", fontSize = 13.sp, color = Color.Gray)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !taking, onClick = {
+                taking = true
+                scope.launch {
+                    val r = withContext(Dispatchers.IO) {
+                        runCatching { app.myspoti.pass.PassTaker.take(o) }.mapCatching { p ->
+                            if (!PassAndroid.apply(context.applicationContext, p)) throw java.io.IOException("could not apply it")
+                            p
+                        }
+                    }
+                    r.fold(
+                        { p ->
+                            Toast.makeText(context, context.getString(R.string.pass_received, p.from.ifBlank { o.name }), Toast.LENGTH_LONG).show()
+                            PassAndroid.restart(context.applicationContext)
+                        },
+                        { Toast.makeText(context, context.getString(R.string.pass_take_failed, it.message ?: it.javaClass.simpleName), Toast.LENGTH_LONG).show() },
+                    )
+                    onDismiss()
+                }
+            }) { Text(stringResource(R.string.pass_take)) }
+        },
+        dismissButton = { TextButton(enabled = !taking, onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+    )
+}
+
+/** Jam: a sign-in code opened as a link (the camera scanned the computer's code). */
+object PassTakeLinks {
+    val pending = kotlinx.coroutines.flow.MutableStateFlow<app.myspoti.pass.PassOffer?>(null)
+}
+
+/** Above every screen, signed in or not: the yes before taking a sign-in that was opened as a link. */
+@Composable
+fun PassTakeHost() {
+    val o by PassTakeLinks.pending.collectAsState()
+    o?.let { offer -> androidx.compose.runtime.key(offer) { PassTakeConfirm(offer, onDismiss = { PassTakeLinks.pending.compareAndSet(offer, null) }) } }
 }

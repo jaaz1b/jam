@@ -37,4 +37,16 @@
     <string name="settings_genius_detail">What songs mean and the annotations on their lines, and Genius lyrics when no other source has them. Off: nothing is asked of Genius.</string>
     <string name="welcome_start">Get started</string>
     <string name="setup_account_spotify_next">You sign in next, on Spotify\'s own page. Jam never sees your password.</string>
+    <string name="pass_offer">Sign in another device</string>
+    <string name="pass_offer_detail">Show a code that your phone scans to get this sign-in, your settings and extensions.</string>
+    <string name="pass_offer_title">Scan this code with Jam on your phone</string>
+    <string name="pass_offer_hint">On your phone, in Jam: on Spotify's sign-in page tap Help › Sign in with your computer (or Welcome › Sign in with your computer), then scan this code. Both must be on the same Wi-Fi.</string>
+    <string name="pass_offer_done">Your phone is signed in (%1$s).</string>
+    <string name="pass_take">Sign in with your computer</string>
+    <string name="pass_take_detail">Sign in to Spotify in Jam on your computer, show its code (Settings › Other devices › Sign in another device), and scan it here.</string>
+    <string name="pass_take_confirm">Sign in from %1$s?</string>
+    <string name="pass_take_confirm_text">Jam gets the Spotify sign-in, settings and extensions of that device, straight over your Wi-Fi and encrypted. Then it starts again.</string>
+    <string name="pass_take_failed">Not signed in: %1$s</string>
+    <string name="pass_take_wrong_code">This is the code for sending, not for signing in. On the computer use Settings › Other devices › Sign in another device.</string>
+    <string name="pass_take_phone">Get it from another phone</string>
 </resources>

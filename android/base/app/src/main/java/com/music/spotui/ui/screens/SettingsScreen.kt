@@ -74,6 +74,8 @@ fun SettingsScreen(navController: NavController) {
     var passReceive by remember { mutableStateOf(false) }
     if (passSend) com.music.spotui.pass.PassSendFlow { passSend = false }
     if (passReceive) com.music.spotui.pass.PassReceiveDialog { passReceive = false }
+    var passOffer by remember { mutableStateOf(false) }
+    if (passOffer) com.music.spotui.pass.PassOfferDialog { passOffer = false }
     // A page inside Settings (Transitions and AutoMix's options): its own screen, back returns to the tab.
     var sub by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf<String?>(null) }
     androidx.activity.compose.BackHandler(enabled = sub != null) { sub = null }
@@ -558,6 +560,10 @@ fun SettingsScreen(navController: NavController) {
             Column(Modifier.fillMaxWidth().clickable { passReceive = true }.padding(horizontal = 20.dp, vertical = 12.dp)) {
                 Text(stringResource(R.string.pass_receive), color = AppText, fontSize = 16.sp)
                 Text(stringResource(R.string.pass_receive_detail), color = AppMuted, fontSize = 12.sp)
+            }
+            Column(Modifier.fillMaxWidth().clickable { passOffer = true }.padding(horizontal = 20.dp, vertical = 12.dp)) {
+                Text(stringResource(R.string.pass_offer), color = AppText, fontSize = 16.sp)
+                Text(stringResource(R.string.pass_offer_detail), color = AppMuted, fontSize = 12.sp)
             }
             }
             // Clear of the mini player and the navigation bar, as every other page (96 dp left the

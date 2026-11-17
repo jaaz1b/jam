@@ -71,11 +71,23 @@ fun LoginHelpButton() {
 @Composable
 fun LoginHelpDialog(onClose: () -> Unit) {
     val ctx = LocalContext.current
+    var taking by remember { mutableStateOf(false) }
+    var receiving by remember { mutableStateOf(false) }
+    if (taking) { com.music.spotui.pass.PassTakeFlow(onDismiss = { taking = false; onClose() }); return }
+    if (receiving) { com.music.spotui.pass.PassReceiveDialog(onDismiss = { receiving = false; onClose() }); return }
     AlertDialog(
         onDismissRequest = onClose,
         containerColor = Color(0xFF242424),
         title = { Text(stringResource(R.string.login_help_title), color = AppText) },
-        text = { Text(stringResource(R.string.login_help_detail), color = AppText.copy(alpha = 0.7f)) },
+        text = {
+            // Jam: other ways in when Spotify refuses this page ("Oops! Something went wrong"):
+            // the sign-in of Jam on the computer, or of another phone, by a QR code on the same Wi-Fi.
+            androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                HelpChoice(stringResource(R.string.pass_take), stringResource(R.string.pass_take_detail)) { taking = true }
+                HelpChoice(stringResource(R.string.pass_take_phone), stringResource(R.string.pass_receive_hint)) { receiving = true }
+                Text(stringResource(R.string.login_help_detail), color = AppText.copy(alpha = 0.6f), fontSize = 13.sp)
+            }
+        },
         confirmButton = {
             TextButton(onClick = { onClose(); sendLoginReport(ctx) }) {
                 Text(stringResource(R.string.login_help_send), color = AppAccent)
@@ -99,4 +111,15 @@ fun LoginReportLink(modifier: Modifier = Modifier) {
         color = AppText.copy(alpha = 0.6f), fontFamily = AppSans, fontSize = 14.sp,
         modifier = modifier.clip(RoundedCornerShape(50)).clickable { sendLoginReport(ctx) }.padding(horizontal = 14.dp, vertical = 10.dp),
     )
+}
+
+
+@Composable
+private fun HelpChoice(title: String, detail: String, onClick: () -> Unit) {
+    androidx.compose.foundation.layout.Column(
+        Modifier.clip(RoundedCornerShape(14.dp)).background(Color(0x14FFFFFF)).clickable(onClick = onClick).padding(horizontal = 14.dp, vertical = 10.dp),
+    ) {
+        Text(title, color = AppAccent, fontWeight = FontWeight.Bold, fontSize = 15.sp)
+        Text(detail, color = AppText.copy(alpha = 0.7f), fontSize = 12.sp, lineHeight = 16.sp)
+    }
 }

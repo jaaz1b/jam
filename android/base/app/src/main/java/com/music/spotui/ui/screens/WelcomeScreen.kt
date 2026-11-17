@@ -154,6 +154,15 @@ fun WelcomeScreen(onLogin: () -> Unit) {
                         .padding(horizontal = 16.dp, vertical = 10.dp),
                 )
                 if (passing) com.music.spotui.pass.PassReceiveDialog(onDismiss = { passing = false })
+                // Jam: or the sign-in of Jam on the computer, by the code it shows (when Spotify
+                // refuses the sign-in page on the phone).
+                var taking by remember { mutableStateOf(false) }
+                Text(
+                    stringResource(R.string.pass_take),
+                    color = AppText, fontFamily = AppSans, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                    modifier = Modifier.pressable(0.96f, onClick = { taking = true }).clip(RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                if (taking) com.music.spotui.pass.PassTakeFlow(onDismiss = { taking = false })
                 // Spotify's sign-in is the account choice's to explain when it is not the next page.
                 if (!choosesAccount) Text(
                     stringResource(R.string.welcome_privacy),

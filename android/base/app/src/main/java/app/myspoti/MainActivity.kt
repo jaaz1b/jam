@@ -214,6 +214,8 @@ class MainActivity : AppCompatActivity() {
                         }
                         // A pass QR code scanned with the camera: the yes before sending this phone's setup.
                         if (signedIn) com.music.spotui.pass.PassLinkHost()
+                        // Jam: a computer's sign-in code opened as a link, signed in or not.
+                        com.music.spotui.pass.PassTakeHost()
                         // "Ask each time": the download quality question, above every screen.
                         com.music.spotui.ui.components.DownloadAskHost()
                         // An extension about to change the Spotify account waits for the user's yes.

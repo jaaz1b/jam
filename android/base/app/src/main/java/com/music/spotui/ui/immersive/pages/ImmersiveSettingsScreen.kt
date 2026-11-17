@@ -1198,6 +1198,8 @@ private fun AccountsPage(back: () -> Unit) {
     var passReceive by remember { mutableStateOf(false) }
     if (passSend) com.music.spotui.pass.PassSendFlow { passSend = false }
     if (passReceive) com.music.spotui.pass.PassReceiveDialog { passReceive = false }
+    var passOffer by remember { mutableStateOf(false) }
+    if (passOffer) com.music.spotui.pass.PassOfferDialog { passOffer = false }
     val isTv = remember { ctx.packageManager.hasSystemFeature(android.content.pm.PackageManager.FEATURE_LEANBACK) }
     ImmersivePage(title = stringResource(R.string.accounts_title), onBack = back) {
         // The account provider: where extension plays are counted and the library is read from (one at a time).
@@ -1249,6 +1251,7 @@ private fun AccountsPage(back: () -> Unit) {
             // A TV has no camera: it only receives.
             if (!isTv) row { ImmersiveGroupRow(stringResource(R.string.pass_send), detail = stringResource(R.string.pass_send_detail), chevron = true, onClick = { passSend = true }) }
             row { ImmersiveGroupRow(stringResource(R.string.pass_receive), detail = stringResource(R.string.pass_receive_detail), chevron = true, onClick = { passReceive = true }) }
+            row { ImmersiveGroupRow(stringResource(R.string.pass_offer), detail = stringResource(R.string.pass_offer_detail), chevron = true, onClick = { passOffer = true }) }
         }
     }
 }
