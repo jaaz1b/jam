@@ -15,7 +15,7 @@ plugins {
 }
 
 kotlin {
-    jvmToolchain(17)
+    jvmToolchain(21)
     compilerOptions {
         freeCompilerArgs.addAll("-Xskip-prerelease-check", "-nowarn")
         optIn.addAll(
@@ -29,11 +29,14 @@ kotlin {
 }
 
 val androidApp = rootDir.resolve("../android/base/app")
+val androidHost = rootDir.resolve("../android/base/host-android")
 val androidOnly: List<String> = file("android-only.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
 
 sourceSets {
     main {
         kotlin.srcDir(androidApp.resolve("src/main/java"))
+        // The Android host (the hidden Web Player's runtime, logs, accounts): its Android-only files are left out too.
+        kotlin.srcDir(androidHost.resolve("src/main/kotlin"))
         kotlin.exclude(androidOnly)
         // The app's res/ (strings in every language, drawables, fonts, raw), read at run time by
         // the resource shim (android/content/res, androidx/compose/ui/res).
@@ -43,18 +46,38 @@ sourceSets {
 
 /** Copies the Android app's res/ into the jar (as res/...), for the resource shim. */
 val copyRes by tasks.registering(Copy::class) {
+    // The host library's resources first (its values files renamed so they sit beside the app's), then the app's.
+    from(androidHost.resolve("src/main/res")) { into("res"); eachFile { if (relativePath.segments[1].startsWith("values")) name = "host_$name" } }
     from(androidApp.resolve("src/main/res")) { into("res") }
+    // The app overrides the host where both have a file (as Android merges an app over its libraries).
+    duplicatesStrategy = DuplicatesStrategy.INCLUDE
     into(layout.buildDirectory.dir("generated/res"))
 }
 /** R: one id per resource, generated from res/ (windows/buildSrc RGen). */
 val genR by tasks.registering {
-    val res = androidApp.resolve("src/main/res")
-    val src = androidApp.resolve("src/main/java")
+    dependsOn(copyRes)
+    val res = layout.buildDirectory.dir("generated/res/res")
+    val srcs = listOf(androidApp.resolve("src/main/java"), androidHost.resolve("src/main/kotlin"))
     val out = layout.buildDirectory.dir("generated/r")
-    inputs.dir(res); inputs.dir(src); outputs.dir(out); outputs.dir(layout.buildDirectory.dir("generated/rnames"))
-    doLast { RGen.generate(res, src, out.get().asFile) }
+    inputs.dir(res); srcs.forEach { inputs.dir(it) }; outputs.dir(out); outputs.dir(layout.buildDirectory.dir("generated/rnames"))
+    doLast { RGen.generate(res.get().asFile, srcs, out.get().asFile, listOf("app.myspoti.engine", "app.myspoti.host.android")) }
+}
+/** BuildConfig of the app module, as Android's build makes it (the PC's version; no Android updater). */
+val genBuildConfig by tasks.registering {
+    val out = layout.buildDirectory.dir("generated/buildconfig")
+    val version = (findProperty("jamWinVersion") as String?) ?: "1.1.0"
+    inputs.property("version", version); outputs.dir(out)
+    doLast {
+        val d = out.get().asFile.resolve("app/myspoti/engine").apply { mkdirs() }
+        d.resolve("BuildConfig.kt").writeText(
+            "package app.myspoti.engine\n\nobject BuildConfig {\n" +
+            "    const val DEBUG = false\n    const val APPLICATION_ID = \"app.jam.android\"\n    const val BUILD_TYPE = \"release\"\n" +
+            "    const val VERSION_CODE = 1\n    const val VERSION_NAME = \"$version\"\n    const val UPDATE_REPO = \"\"\n" +
+            "    const val APK_NAME = \"Jam\"\n    const val ORPHEON_VERSION = \"1.0.0\"\n    const val FLAVOR = \"\"\n}\n")
+    }
 }
 sourceSets.main {
+    kotlin.srcDir(genBuildConfig)
     kotlin.srcDir(genR)
     resources.srcDir(layout.buildDirectory.dir("generated/rnames"))
 }
@@ -90,7 +113,10 @@ dependencies {
     implementation(libs.coroutines.swing)
     implementation(libs.serialization.json)
     implementation(libs.okhttp)
+    implementation(libs.okhttp.brotli)
+    implementation(libs.okhttp.zstd)
     implementation("org.json:json:20240303")
+    // Android's XmlPullParser (android.util.Xml).
     implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.26.5")
     implementation("org.mozilla:rhino:1.8.1")
     implementation("com.microsoft.onnxruntime:onnxruntime:1.23.2")
@@ -135,4 +161,10 @@ tasks.register<JavaExec>("shots") {
     classpath = sourceSets.main.get().runtimeClasspath
     mainClass.set("app.jam.desktop.ShotsKt")
     args(layout.buildDirectory.dir("shots").get().asFile.absolutePath)
+}
+
+/** Development aid (the deps workflow): downloads every jar of the build, for offline builds elsewhere. */
+tasks.register("resolveAll") {
+    notCompatibleWithConfigurationCache("resolves configurations at execution")
+    doLast { listOf("compileClasspath", "runtimeClasspath").forEach { project.configurations.getByName(it).resolve() } }
 }

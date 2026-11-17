@@ -33,6 +33,7 @@ jobs:
           cd windows
           ./gradlew --version
           ./gradlew :app:dependencies --configuration runtimeClasspath > ../deps-runtime.txt 2>&1 || true
+          ./gradlew --no-configuration-cache :app:resolveAll >> ../deps-runtime.txt 2>&1 || true
           ./gradlew :app:dependencies --configuration compileClasspath > ../deps-compile.txt 2>&1 || true
           ./gradlew :api-spotify:compileKotlin :extensions:compileKotlin :engine:compileKotlinJvm --continue > ../modules.txt 2>&1 || true
           ./gradlew :app:compileKotlin --continue > ../compile.txt 2>&1 || true
