@@ -40,7 +40,7 @@
     <string name="pass_offer">Sign in another device</string>
     <string name="pass_offer_detail">Show a code that your phone scans to get this sign-in, your settings and extensions.</string>
     <string name="pass_offer_title">Scan this code with Jam on your phone</string>
-    <string name="pass_offer_hint">On your phone, in Jam: on Spotify's sign-in page tap Help › Sign in with your computer (or Welcome › Sign in with your computer), then scan this code. Both must be on the same Wi-Fi.</string>
+    <string name="pass_offer_hint">On your phone, in Jam: on Spotify\'s sign-in page tap Trouble signing in? › Sign in with your computer (or Welcome › Sign in with your computer), then scan this code. Both must be on the same Wi-Fi.</string>
     <string name="pass_offer_done">Your phone is signed in (%1$s).</string>
     <string name="pass_take">Sign in with your computer</string>
     <string name="pass_take_detail">Sign in to Spotify in Jam on your computer, show its code (Settings › Other devices › Sign in another device), and scan it here.</string>
