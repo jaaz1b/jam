@@ -14,3 +14,12 @@ com/music/spotui/ui/tv/TvExtensions.kt => ^package com.music.spotui.ui.tv$ => pa
 # SavedStateViewModelFactory); viewModel() is given one (app.jam.desktop.compat.viewModel). Any file.
 * => ^import androidx\.lifecycle\.viewmodel\.compose\.viewModel$ => import app.jam.desktop.compat.viewModel
 * => androidx\.lifecycle\.viewmodel\.compose\.viewModel\( => app.jam.desktop.compat.viewModel(
+# The app's fonts (res/font, variable TTFs): Compose for Desktop cannot load Android resource fonts;
+# app.jam.desktop.compat.Font reads them from the app's res/ and sets the variation axes.
+com/music/spotui/ui/theme/Type.kt => ^private fun sans\(weight: Int\) = Font\($ => private fun sans(weight: Int) = app.jam.desktop.compat.Font(
+com/music/spotui/ui/look/Look.kt => ^private fun inter\(weight: Int, opticalSize: Float\) = Font\($ => private fun inter(weight: Int, opticalSize: Float) = app.jam.desktop.compat.Font(
+# Jam for Windows' themes (app.jam.desktop.themes): their colours after an extension look's, and their
+# row with Jam's in the settings of both looks.
+com/music/spotui/extensions/ExtensionLook.kt => fun color\(key: String\): Color\? = applied.colors\[key\]\?.let \{ Color\(it\) \}$ => fun color(key: String): Color? = applied.colors[key]?.let { Color(it) } ?: app.jam.desktop.themes.Themes.color(key)
+com/music/spotui/ui/screens/SettingsScreen.kt => ^(\s*)app\.jam\.JamYtmModeConfirm\(jamYtmConfirm\) \{ jamYtmConfirm = false \}$ => $1app.jam.JamYtmModeConfirm(jamYtmConfirm) { jamYtmConfirm = false }\n$1app.jam.desktop.themes.ThemesRow()
+com/music/spotui/ui/immersive/pages/ImmersiveSettingsScreen.kt => ^(\s*)app\.jam\.JamYtmModeConfirm\(confirm\) \{ confirm = false \}$ => $1app.jam.JamYtmModeConfirm(confirm) { confirm = false }\n$1}\n$1row { app.jam.desktop.themes.ImmersiveThemesRow()

@@ -134,7 +134,7 @@ fun ActivityWindow(a: android.app.Activity, modifier: Modifier) {
         androidx.lifecycle.compose.LocalLifecycleOwner provides a,
         androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides a,
     ) {
-        Box(modifier.fillMaxSize().background(Color(0xFF0A0A0C))) {
+        Box(modifier.fillMaxSize().background(app.jam.desktop.themes.Themes.window)) {
             root?.let { ViewNode(it) }
             for (top in Windows.stack.toList()) ActivityLayer(top)
             WebSheet.Host()
