@@ -114,7 +114,7 @@ object Intents {
 object Files {
     fun file(uri: Uri): File? = when (uri.scheme) {
         "file", null -> uri.path?.let(::File)
-        "content" -> uri.getQueryParameter("path")?.let(::File) ?: uri.path?.let { p -> File(p.removePrefix("/").substringAfter('/', p)) }.takeIf { it?.exists() == true }
+        "content" -> if (uri.authority == "media") LocalLibrary.file(uri.pathSegments) else uri.getQueryParameter("path")?.let(::File) ?: uri.path?.let { p -> File(p.removePrefix("/").substringAfter('/', p)) }.takeIf { it?.exists() == true }
         else -> null
     }
     fun open(uri: Uri): java.io.InputStream? = when (uri.scheme) {

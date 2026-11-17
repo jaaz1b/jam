@@ -1,0 +1,21 @@
+1 ICON "../app/jam.ico"
+1 VERSIONINFO
+FILEVERSION 2,0,0,0
+PRODUCTVERSION 2,0,0,0
+BEGIN
+  BLOCK "StringFileInfo"
+  BEGIN
+    BLOCK "040904B0"
+    BEGIN
+      VALUE "CompanyName", "Jam"
+      VALUE "FileDescription", "Jam"
+      VALUE "ProductName", "Jam"
+      VALUE "OriginalFilename", "jam-smtc.exe"
+      VALUE "LegalCopyright", "GPL-3.0. Jam, from Myspoti / Orpheon by kota-zo"
+    END
+  END
+  BLOCK "VarFileInfo"
+  BEGIN
+    VALUE "Translation", 0x409, 1200
+  END
+END

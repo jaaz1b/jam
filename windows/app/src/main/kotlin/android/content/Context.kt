@@ -157,7 +157,14 @@ object ContentResolver {
     fun takePersistableUriPermission(uri: android.net.Uri, flags: Int) {}
     fun releasePersistableUriPermission(uri: android.net.Uri, flags: Int) {}
     val persistedUriPermissions: List<UriPermission> get() = emptyList()
-    fun query(uri: android.net.Uri, projection: Array<String>?, selection: String?, selectionArgs: Array<String>?, sortOrder: String?): android.database.Cursor? = null
+    fun query(uri: android.net.Uri, projection: Array<String>?, selection: String?, selectionArgs: Array<String>?, sortOrder: String?): android.database.Cursor? =
+        if (uri.toString().startsWith("content://media/external/audio/media")) {
+            val id = uri.lastPathSegment?.toLongOrNull()
+            app.jam.desktop.shim.LocalLibrary.cursor(projection).let { c -> if (id == null) c else app.jam.desktop.shim.LocalLibrary.one(id, projection) }
+        } else app.jam.desktop.shim.Files.file(uri)?.takeIf { it.isFile }?.let { f ->
+            val cols = projection ?: arrayOf("_display_name", "_size")
+            app.jam.desktop.shim.ListCursor(cols, listOf(cols.map { c -> when (c) { "_display_name" -> f.name; "_size" -> f.length(); "date_modified" -> f.lastModified() / 1000; else -> null } }))
+        }
     fun query(uri: android.net.Uri, projection: Array<String>?, queryArgs: android.os.Bundle?, cancellationSignal: Any?): android.database.Cursor? = null
     fun delete(uri: android.net.Uri, where: String?, selectionArgs: Array<String>?): Int = if (app.jam.desktop.shim.Files.file(uri)?.delete() == true) 1 else 0
     fun insert(uri: android.net.Uri, values: ContentValues?): android.net.Uri? = null

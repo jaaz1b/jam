@@ -169,6 +169,21 @@ jobs:
           mkdir -p "$D"/licenses && cp /tmp/ff/*/LICENSE.txt "$D"/licenses/FFmpeg-LICENSE.txt
           "$D"/ffmpeg.exe -hide_banner -version | head -1
 
+      # Windows' media controls (flyout, lock screen) for Jam: a small C++/WinRT helper.
+      - name: Media controls helper
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          Set-Location "$env:GITHUB_WORKSPACE\windows\smtc"
+          & rc /nologo /fo jam-smtc.res jam-smtc.rc
+          & cl /nologo /std:c++17 /EHsc /O2 /MT /DUNICODE /D_UNICODE jam-smtc.cpp jam-smtc.res /link windowsapp.lib ole32.lib shell32.lib /SUBSYSTEM:CONSOLE
+          if (-not (Test-Path jam-smtc.exe)) { throw "jam-smtc.exe was not built" }
+          Copy-Item jam-smtc.exe "$env:GITHUB_WORKSPACE\windows\app\app-resources\windows\jam-smtc.exe" -Force
+
       # ---------------------------------------------------------------- The Jam app (windows/)
 
       - uses: actions/setup-java@v4
