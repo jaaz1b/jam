@@ -8,6 +8,7 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import kotlinx.coroutines.launch
 
 val LocalOnBackPressedDispatcherOwner = compositionLocalOf<OnBackPressedDispatcherOwner?> { app.jam.desktop.shim.DesktopApp.activity }
 object LocalActivityResultRegistryOwner
@@ -32,7 +33,6 @@ fun PredictiveBackHandler(enabled: Boolean = true, onBack: suspend (progress: ko
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     BackHandler(enabled) { scope.launch { onBack(kotlinx.coroutines.flow.emptyFlow()) } }
 }
-private fun kotlinx.coroutines.CoroutineScope.launch(b: suspend kotlinx.coroutines.CoroutineScope.() -> Unit) = kotlinx.coroutines.launch(this, block = b)
 
 /** ComponentActivity.setContent: the window draws [content]. */
 fun androidx.activity.ComponentActivity.setContent(parent: androidx.compose.runtime.CompositionContext? = null, content: @Composable () -> Unit) {

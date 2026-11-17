@@ -39,7 +39,9 @@ class Network private constructor(val id: Int) { companion object { val DEFAULT 
     fun openConnection(url: java.net.URL): java.net.URLConnection = url.openConnection()
     fun getAllByName(host: String): Array<java.net.InetAddress> = java.net.InetAddress.getAllByName(host) }
 class NetworkInfo { val isConnected: Boolean get() = ConnectivityManager.online(); val isConnectedOrConnecting: Boolean get() = isConnected; val type: Int get() = ConnectivityManager.TYPE_WIFI; val typeName = "WIFI" }
-class LinkProperties { val dnsServers: List<java.net.InetAddress> = emptyList(); val interfaceName: String? = null; val linkAddresses: List<Any> = emptyList(); val isPrivateDnsActive = false; val privateDnsServerName: String? = null }
+class LinkAddress(val address: java.net.InetAddress, val prefixLength: Int)
+class LinkProperties { val dnsServers: List<java.net.InetAddress> = emptyList(); val interfaceName: String? = null
+    val linkAddresses: List<LinkAddress> get() = runCatching { java.net.NetworkInterface.getNetworkInterfaces().toList().filter { it.isUp && !it.isLoopback }.flatMap { it.interfaceAddresses }.map { LinkAddress(it.address, it.networkPrefixLength.toInt()) } }.getOrDefault(emptyList()); val isPrivateDnsActive = false; val privateDnsServerName: String? = null }
 class NetworkCapabilities {
     fun hasTransport(t: Int): Boolean = t == TRANSPORT_WIFI || t == TRANSPORT_ETHERNET
     fun hasCapability(c: Int): Boolean = c != NET_CAPABILITY_NOT_ROAMING || true

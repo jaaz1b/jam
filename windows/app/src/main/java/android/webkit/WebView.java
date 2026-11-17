@@ -69,6 +69,8 @@ public class WebView extends android.view.ViewGroup {
     public void zoomBy(float f) {}
     @Override protected void onWindowVisibilityChanged(int visibility) {}
 
+    /** What onCreateWindow gives the app to hand back the web view a popup opens in. */
+    public class WebViewTransport { private WebView webview; public synchronized void setWebView(WebView w) { webview = w; } public synchronized WebView getWebView() { return webview; } }
     public static void setWebContentsDebuggingEnabled(boolean on) {}
     public static String getDefaultUserAgent(Context c) { return WebSettings.getDefaultUserAgent(c); }
     public static android.content.pm.PackageInfo getCurrentWebViewPackage() {

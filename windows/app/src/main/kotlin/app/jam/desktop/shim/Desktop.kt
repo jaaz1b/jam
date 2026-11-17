@@ -53,7 +53,8 @@ object Services {
         "android.net.nsd.NsdManager" -> get(Context.NSD_SERVICE)
         "android.os.BatteryManager" -> get(Context.BATTERY_SERVICE)
         "android.app.AlarmManager" -> get(Context.ALARM_SERVICE)
-        else -> null
+        // Any other manager the app asks for by class: one of its own, made once (they hold no state of Android's).
+        else -> synchronized(this) { byName.getOrPut(c.name) { runCatching { c.getDeclaredConstructor().newInstance() }.getOrNull() } }
     }
 }
 

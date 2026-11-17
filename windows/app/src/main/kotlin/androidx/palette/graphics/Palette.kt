@@ -92,7 +92,8 @@ class Palette private constructor(val swatches: List<Swatch>) {
 
         private fun quant(c: Int) = ((c shr 19 and 31) shl 10) or ((c shr 11 and 31) shl 5) or (c shr 3 and 31)
         private fun r5(q: Int) = q shr 10 and 31; private fun g5(q: Int) = q shr 5 and 31; private fun b5(q: Int) = q and 31
-        private fun expand(q: Int): Int { fun e(v: Int) = (v shl 3) or (v shr 2); return (0xFF shl 24) or (e(r5(q)) shl 16) or (e(g5(q)) shl 8) or e(b5(q)) }
+        private fun e5(v: Int) = (v shl 3) or (v shr 2)
+        private fun expand(q: Int): Int { val e = ::e5; return (0xFF shl 24) or (e(r5(q)) shl 16) or (e(g5(q)) shl 8) or e(b5(q)) }
 
         private fun quantize(px: IntArray, maxColors: Int, filters: List<Filter>): List<Swatch> {
             val hist = IntArray(1 shl 15)

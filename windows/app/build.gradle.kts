@@ -32,12 +32,32 @@ val androidApp = rootDir.resolve("../android/base/app")
 val androidHost = rootDir.resolve("../android/base/host-android")
 val androidOnly: List<String> = file("android-only.txt").readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
 
+val jamAndroid = rootDir.resolve("../ytm/src-tauri/gen/android/app/src/main")
+/** Jam for Android's own files the PC uses as they are (Discord's presence, its settings page and sources). */
+val jamAndroidFiles = listOf("Discord.kt", "Presence.kt", "Prefs.kt", "Player.kt", "SettingsActivity.kt", "DiscordCallbackActivity.kt", "Sources.kt", "CoverStore.kt")
+
+/**
+ * The Android sources, as compiled here: the app's and the host's (less android-only.txt) and Jam for
+ * Android's few shared files, with the small PC changes of patches.txt applied (each line:
+ * path ⟶ regex ⟶ replacement, separated by " => "). The originals are never modified.
+ */
+val androidSources by tasks.registering(Sync::class) {
+    val patches = file("patches.txt")
+    inputs.file(patches)
+    from(androidApp.resolve("src/main/java")) { exclude(androidOnly) }
+    from(androidHost.resolve("src/main/kotlin")) { exclude(androidOnly) }
+    from(jamAndroid.resolve("java")) { include(jamAndroidFiles.map { "app/jam/android/$it" }) }
+    into(layout.buildDirectory.dir("generated/android-src"))
+    val rules = patches.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.map { it.split(Regex(" =>(?: |$)")) }
+    eachFile {
+        val mine = rules.filter { r -> r[0] == path }
+        if (mine.isNotEmpty()) filter { line -> mine.fold(line) { l, r -> l.replace(Regex(r[1]), r.getOrElse(2) { "" }.replace("\\n", "\n")) } }
+    }
+}
+
 sourceSets {
     main {
-        kotlin.srcDir(androidApp.resolve("src/main/java"))
-        // The Android host (the hidden Web Player's runtime, logs, accounts): its Android-only files are left out too.
-        kotlin.srcDir(androidHost.resolve("src/main/kotlin"))
-        kotlin.exclude(androidOnly)
+        kotlin.srcDir(androidSources)
         // The app's res/ (strings in every language, drawables, fonts, raw), read at run time by
         // the resource shim (android/content/res, androidx/compose/ui/res).
         resources.srcDir(layout.buildDirectory.dir("generated/res"))
@@ -49,6 +69,9 @@ val copyRes by tasks.registering(Copy::class) {
     // The host library's resources first (its values files renamed so they sit beside the app's), then the app's.
     from(androidHost.resolve("src/main/res")) { into("res"); eachFile { if (relativePath.segments[1].startsWith("values")) name = "host_$name" } }
     from(androidApp.resolve("src/main/res")) { into("res") }
+    // The bundled pages and data (assets/): the app's and Jam for Android's (its settings page).
+    from(androidApp.resolve("src/main/assets")) { into("assets") }
+    from(jamAndroid.resolve("assets")) { into("assets") }
     // The app overrides the host where both have a file (as Android merges an app over its libraries).
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
     into(layout.buildDirectory.dir("generated/res"))

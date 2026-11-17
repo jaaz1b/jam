@@ -23,7 +23,7 @@ class NsdManager {
     companion object { const val PROTOCOL_DNS_SD = 1; const val FAILURE_INTERNAL_ERROR = 0; const val FAILURE_ALREADY_ACTIVE = 3; const val FAILURE_MAX_LIMIT = 4; const val FAILURE_OPERATION_NOT_RUNNING = 5 }
 }
 class NsdServiceInfo() {
-    var serviceName: String? = null; var serviceType: String? = null; var host: java.net.InetAddress? = null; var port: Int = 0
+    var serviceName: String = ""; var serviceType: String = ""; var host: java.net.InetAddress? = null; var port: Int = 0
     val hostAddresses: List<java.net.InetAddress> get() = listOfNotNull(host)
     private val attrs = HashMap<String, ByteArray?>()
     val attributes: Map<String, ByteArray?> get() = attrs

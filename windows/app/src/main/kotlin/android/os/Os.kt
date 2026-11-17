@@ -73,16 +73,19 @@ class Bundle() : BaseBundle(), Parcelable, Cloneable {
 class PersistableBundle() : BaseBundle() { constructor(o: PersistableBundle) : this() { map.putAll(o.map) } }
 
 /** The main thread is Swing's event thread; other loopers are plain threads ([HandlerThread]). */
-class Looper private constructor(val thread: Thread?) {
-    private val queue: java.util.concurrent.LinkedBlockingQueue<Runnable>? = if (thread == null) null else java.util.concurrent.LinkedBlockingQueue()
+class Looper private constructor(private val own: Thread?) {
+    /** The looper's thread (Swing's event thread for the main looper). */
+    val thread: Thread get() = own ?: edt
+    private val queue: java.util.concurrent.LinkedBlockingQueue<Runnable>? = if (own == null) null else java.util.concurrent.LinkedBlockingQueue()
     internal fun enqueue(r: Runnable) { if (queue == null) Desk.post(r) else queue.put(r) }
     internal fun loopForever() { val q = queue ?: return; while (!Thread.currentThread().isInterrupted) { try { q.take().run() } catch (_: InterruptedException) { return } catch (t: Throwable) { Desk.log('E', "Looper", "uncaught", t) } } }
-    fun quit() { thread?.interrupt() }
+    fun quit() { own?.interrupt() }
     fun quitSafely() = quit()
-    fun isCurrentThread(): Boolean = if (thread == null) Desk.isMain() else Thread.currentThread() === thread
+    fun isCurrentThread(): Boolean = if (own == null) Desk.isMain() else Thread.currentThread() === own
     companion object {
         private val main = Looper(null)
         private val mine = ThreadLocal<Looper?>()
+        private val edt: Thread by lazy { if (Desk.isMain()) Thread.currentThread() else { var t: Thread? = null; javax.swing.SwingUtilities.invokeAndWait { t = Thread.currentThread() }; t!! } }
         @JvmStatic fun getMainLooper(): Looper = main
         @JvmStatic fun myLooper(): Looper? = if (Desk.isMain()) main else mine.get()
         @JvmStatic fun prepare() { if (mine.get() == null) mine.set(Looper(Thread.currentThread())) }
@@ -172,6 +175,8 @@ object Build {
     @JvmField val TAGS: String = "release-keys"
     @JvmField val TYPE: String = "user"
     @JvmField val SUPPORTED_ABIS: Array<String> = arrayOf("x86_64")
+    @JvmField val SUPPORTED_64_BIT_ABIS: Array<String> = arrayOf("x86_64")
+    @JvmField val SUPPORTED_32_BIT_ABIS: Array<String> = arrayOf()
     @JvmField val SOC_MODEL: String = "pc"
     @JvmField val SOC_MANUFACTURER: String = "pc"
     object VERSION {
@@ -280,14 +285,14 @@ object Trace { @JvmStatic fun beginSection(n: String) {}; @JvmStatic fun endSect
     @JvmStatic fun beginAsyncSection(n: String, c: Int) {}; @JvmStatic fun endAsyncSection(n: String, c: Int) {} }
 object Debug { @JvmStatic fun isDebuggerConnected() = false; @JvmStatic fun getNativeHeapAllocatedSize(): Long = 0
     @JvmStatic fun getMemoryInfo(m: MemoryInfo) {}
-    class MemoryInfo { fun getTotalPss() = 0; val totalPss = 0 } }
+    class MemoryInfo { val totalPss = 0 } }
 object StrictMode { @JvmStatic fun allowThreadDiskReads(): ThreadPolicy = ThreadPolicy(); @JvmStatic fun allowThreadDiskWrites(): ThreadPolicy = ThreadPolicy()
     @JvmStatic fun setThreadPolicy(p: ThreadPolicy) {}; @JvmStatic fun getThreadPolicy() = ThreadPolicy(); class ThreadPolicy }
 class Looper2
 object UserHandle { @JvmStatic fun myUserId() = 0 }
 class StatFs(path: String) { private val f = File(path); val availableBytes: Long get() = f.usableSpace; val totalBytes: Long get() = f.totalSpace; val freeBytes: Long get() = f.freeSpace
     val blockSizeLong: Long get() = 4096; val availableBlocksLong: Long get() = f.usableSpace / 4096 }
-class LocaleList(vararg val locales: java.util.Locale) { fun get(i: Int) = locales[i]; val size: Int get() = locales.size; fun isEmpty() = locales.isEmpty()
+class LocaleList(vararg val locales: java.util.Locale) { operator fun get(i: Int) = locales[i]; val size: Int get() = locales.size; fun isEmpty() = locales.isEmpty()
     fun toLanguageTags(): String = locales.joinToString(",") { it.toLanguageTag() }
     companion object { @JvmStatic fun getDefault() = LocaleList(java.util.Locale.getDefault()); @JvmStatic fun getAdjustedDefault() = getDefault()
         @JvmStatic fun forLanguageTags(t: String?) = LocaleList(*(t ?: "").split(',').filter { it.isNotBlank() }.map { java.util.Locale.forLanguageTag(it) }.toTypedArray())

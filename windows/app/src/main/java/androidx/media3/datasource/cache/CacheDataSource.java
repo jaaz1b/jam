@@ -10,11 +10,12 @@ public final class CacheDataSource implements DataSource {
     public static final int FLAG_BLOCK_ON_CACHE = 1, FLAG_IGNORE_CACHE_ON_ERROR = 2, FLAG_IGNORE_CACHE_FOR_UNSET_LENGTH_REQUESTS = 4;
     private final SimpleCache cache; private final DataSource upstream; private final int flags;
     private RandomAccessFile file; private DataSource reading; private String key; private long pos, remaining, total; private Uri uri;
-    CacheDataSource(SimpleCache cache, DataSource upstream, int flags) { this.cache = cache; this.upstream = upstream; this.flags = flags; }
+    private final CacheKeyFactory keys;
+    CacheDataSource(SimpleCache cache, DataSource upstream, int flags, CacheKeyFactory keys) { this.cache = cache; this.upstream = upstream; this.flags = flags; this.keys = keys; }
     public Cache getCache() { return cache; }
     @Override public void addTransferListener(TransferListener l) { upstream.addTransferListener(l); }
     @Override public long open(DataSpec s) throws IOException {
-        key = s.key != null ? s.key : s.uri.toString(); uri = s.uri; pos = s.position;
+        key = keys.buildCacheKey(s); uri = s.uri; pos = s.position;
         total = cache.length(key);
         long have = cache.data(key).length();
         if (total >= 0 && pos + (s.length == -1 ? total - pos : s.length) <= have) {
@@ -45,9 +46,10 @@ public final class CacheDataSource implements DataSource {
         public Factory setCacheWriteDataSinkFactory(Object f) { return this; }
         public Factory setCacheReadDataSourceFactory(Object f) { return this; }
         public Factory setEventListener(Object l) { return this; }
-        public Factory setCacheKeyFactory(Object f) { return this; }
+        private CacheKeyFactory keys = CacheKeyFactory.DEFAULT;
+        public Factory setCacheKeyFactory(CacheKeyFactory f) { keys = f; return this; }
         public Cache getCache() { return cache; }
-        @Override public CacheDataSource createDataSource() { return new CacheDataSource((SimpleCache) cache, upstream.createDataSource(), flags); }
+        @Override public CacheDataSource createDataSource() { return new CacheDataSource((SimpleCache) cache, upstream.createDataSource(), flags, keys); }
         public CacheDataSource createDataSourceForDownloading() { return createDataSource(); }
     }
 }

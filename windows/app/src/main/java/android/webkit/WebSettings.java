@@ -17,7 +17,9 @@ public class WebSettings {
     public void setUseWideViewPort(boolean b) { wide = b; } public boolean getUseWideViewPort() { return wide; }
     public void setGeolocationEnabled(boolean b) { geo = b; }
     public void setSupportMultipleWindows(boolean b) { multiWindows = b; } public boolean supportMultipleWindows() { return multiWindows; }
-    public void setJavaScriptCanOpenWindowsAutomatically(boolean b) {}
+    private boolean openWindows;
+    public void setJavaScriptCanOpenWindowsAutomatically(boolean b) { openWindows = b; }
+    public boolean getJavaScriptCanOpenWindowsAutomatically() { return openWindows; }
     public void setSupportZoom(boolean b) { zoom = b; }
     public void setBuiltInZoomControls(boolean b) { builtInZoom = b; }
     public void setDisplayZoomControls(boolean b) { displayZoom = b; }

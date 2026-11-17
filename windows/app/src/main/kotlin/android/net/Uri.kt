@@ -84,7 +84,7 @@ class Uri private constructor(private val raw: String) : android.os.Parcelable, 
 
     companion object {
         @JvmField val EMPTY: Uri = Uri("")
-        @JvmStatic fun parse(s: String): Uri = Uri(s)
+        @JvmStatic fun parse(s: String?): Uri = Uri(s ?: "")
         @JvmStatic fun fromFile(f: java.io.File): Uri = Uri("file://" + f.absoluteFile.toURI().rawPath)
         @JvmStatic fun fromParts(scheme: String, ssp: String, fragment: String?): Uri = Uri("$scheme:${encode(ssp, "/:@")}" + (fragment?.let { "#" + encode(it) } ?: ""))
         @JvmStatic fun withAppendedPath(base: Uri, seg: String): Uri = base.buildUpon().appendEncodedPath(seg).build()

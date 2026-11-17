@@ -106,8 +106,6 @@ class Window(val activity: Activity) {
     fun setSoftInputMode(m: Int) {}
     fun setDecorFitsSystemWindows(b: Boolean) {}
     val insetsController: android.view.WindowInsetsController? get() = android.view.WindowInsetsController()
-    fun setNavigationBarColor(c: Int) { navigationBarColor = c }
-    fun setStatusBarColor(c: Int) { statusBarColor = c }
     fun setSustainedPerformanceMode(b: Boolean) {}
     fun setHideOverlayWindows(b: Boolean) {}
     fun setFrameRateBoostOnTouchEnabled(b: Boolean) {}
@@ -230,7 +228,7 @@ class NotificationManager {
 }
 class ActivityManager {
     class RunningAppProcessInfo { @JvmField var importance: Int = IMPORTANCE_FOREGROUND; @JvmField var processName: String = "app.jam.android"; @JvmField var lastTrimLevel = 0
-        companion object { const val IMPORTANCE_FOREGROUND = 100; const val IMPORTANCE_VISIBLE = 200; const val IMPORTANCE_FOREGROUND_SERVICE = 125; const val IMPORTANCE_CACHED = 400; const val IMPORTANCE_SERVICE = 300 } }
+        companion object { const val IMPORTANCE_FOREGROUND = 100; const val IMPORTANCE_PERCEPTIBLE = 230; const val IMPORTANCE_TOP_SLEEPING = 325; const val IMPORTANCE_GONE = 1000; const val IMPORTANCE_VISIBLE = 200; const val IMPORTANCE_FOREGROUND_SERVICE = 125; const val IMPORTANCE_CACHED = 400; const val IMPORTANCE_SERVICE = 300 } }
     class MemoryInfo { @JvmField var availMem: Long = Runtime.getRuntime().maxMemory(); @JvmField var totalMem: Long = Runtime.getRuntime().maxMemory() * 4; @JvmField var lowMemory = false; @JvmField var threshold: Long = 0 }
     fun getMemoryInfo(i: MemoryInfo) {}
     val isLowRamDevice: Boolean get() = false
@@ -238,12 +236,12 @@ class ActivityManager {
     val largeMemoryClass: Int get() = 1024
     val runningAppProcesses: List<RunningAppProcessInfo> get() = listOf(RunningAppProcessInfo())
     fun getHistoricalProcessExitReasons(pkg: String?, pid: Int, max: Int): List<ApplicationExitInfo> = emptyList()
-    fun isBackgroundRestricted(): Boolean = false
+    val isBackgroundRestricted: Boolean get() = false
     val appTasks: List<Any> get() = emptyList()
     companion object { @JvmStatic fun getMyMemoryState(i: RunningAppProcessInfo) {}; @JvmStatic fun isUserAMonkey() = false }
 }
 class ApplicationExitInfo { val reason: Int = 0; val timestamp: Long = 0; val description: String? = null; val status: Int = 0; val importance: Int = 0; val pss: Long = 0; val rss: Long = 0
-    fun getTraceInputStream(): java.io.InputStream? = null
+    val traceInputStream: java.io.InputStream? get() = null
     companion object { const val REASON_UNKNOWN = 0; const val REASON_EXIT_SELF = 1; const val REASON_SIGNALED = 2; const val REASON_LOW_MEMORY = 3; const val REASON_CRASH = 4; const val REASON_CRASH_NATIVE = 5
         const val REASON_ANR = 6; const val REASON_INITIALIZATION_FAILURE = 7; const val REASON_PERMISSION_CHANGE = 8; const val REASON_EXCESSIVE_RESOURCE_USAGE = 9; const val REASON_USER_REQUESTED = 10
         const val REASON_USER_STOPPED = 11; const val REASON_DEPENDENCY_DIED = 12; const val REASON_OTHER = 13; const val REASON_FREEZER = 14; const val REASON_PACKAGE_STATE_CHANGE = 15; const val REASON_PACKAGE_UPDATED = 16 } }

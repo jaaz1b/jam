@@ -12,6 +12,7 @@ public final class C {
     public static final int DATA_TYPE_MEDIA = 1, CRYPTO_TYPE_NONE = 0;
     public static final String LANGUAGE_UNDETERMINED = "und";
     public static final long MICROS_PER_SECOND = 1_000_000L, NANOS_PER_SECOND = 1_000_000_000L;
+    public static final int ENCODING_PCM_16BIT_BIG_ENDIAN = 0x10000000, ENCODING_PCM_24BIT_BIG_ENDIAN = 0x50000001, ENCODING_PCM_32BIT_BIG_ENDIAN = 0x60000001;
     public static final int CONTENT_TYPE_DASH = 0, CONTENT_TYPE_HLS = 2, CONTENT_TYPE_OTHER = 4, CONTENT_TYPE_SS = 1, CONTENT_TYPE_RTSP = 3;
     public static int bytesPerSample(int encoding) { switch (encoding) { case ENCODING_PCM_8BIT: return 1; case ENCODING_PCM_24BIT: return 3; case ENCODING_PCM_FLOAT: case ENCODING_PCM_32BIT: return 4; default: return 2; } }
 }

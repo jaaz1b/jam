@@ -105,7 +105,10 @@ object Res {
         return v
     }
 
+    /** The framework's strings (android.R.string): the app's own of that name, else English. */
+    private val framework = mapOf(0x01040000 to ("cancel" to "Cancel"), 0x0104000a to ("ok" to "OK"), 0x01040013 to ("yes" to "Yes"), 0x01040009 to ("no" to "No"), 0x01040001 to ("copy" to "Copy"))
     fun string(id: Int): String {
+        framework[id]?.let { (name, en) -> return string(name) ?: string("action_$name") ?: en }
         val n = byId[id]?.second ?: return "#$id"
         return resolve(lookup { it.strings[n] }) ?: n
     }
@@ -133,7 +136,11 @@ object Res {
 
     fun array(id: Int): List<String> { val n = byId[id]?.second ?: return emptyList(); return lookup { it.arrays[n] }?.map { resolve(it) ?: it }.orEmpty() }
 
-    fun color(id: Int): Int = colorValue(byId[id]?.second ?: return 0)
+    fun color(id: Int): Int = when (id) {
+        0x0106001a -> 0xFF8AB4F8.toInt()  // system_accent1_200: Windows has no wallpaper palette; a soft blue
+        0x0106000b -> -1; 0x0106000c -> 0xFF000000.toInt(); 0x0106000d -> 0
+        else -> colorValue(byId[id]?.second ?: return 0)
+    }
     fun colorValue(name: String): Int {
         val v = lookup { it.colors[name] } ?: return 0
         if (v.startsWith("@color/")) return colorValue(v.removePrefix("@color/"))

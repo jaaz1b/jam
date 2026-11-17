@@ -78,5 +78,19 @@ open class Surface { fun release() {}; val isValid: Boolean get() = false }
 open class SurfaceView(context: Context) : View(context)
 open class TextureView(context: Context) : View(context)
 object Gravity { const val CENTER = 17; const val TOP = 48; const val BOTTOM = 80; const val START = 8388611; const val END = 8388613; const val FILL = 119; const val CENTER_HORIZONTAL = 1; const val CENTER_VERTICAL = 16 }
-class LayoutInflater
+/** Inflates a layout of res/layout: its root view, by the class its XML names (PlayerView, FrameLayout...). */
+class LayoutInflater private constructor(private val context: android.content.Context) {
+    fun inflate(id: Int, root: ViewGroup?): View = inflate(id, root, root != null)
+    fun inflate(id: Int, root: ViewGroup?, attach: Boolean): View {
+        val path = app.jam.desktop.shim.Res.file(id) ?: throw IllegalArgumentException("no layout $id")
+        val xml = app.jam.desktop.shim.Res.open(path).use { it.readBytes().decodeToString() }
+        val tag = Regex("<([A-Za-z][A-Za-z0-9_.]*)").findAll(xml).map { it.groupValues[1] }.first { !it.startsWith("?") && it != "merge" }
+        val cls = when { '.' in tag -> tag; tag == "View" || tag == "ViewGroup" || tag == "SurfaceView" || tag == "TextureView" -> "android.view.$tag"; else -> "android.widget.$tag" }
+        val v = Class.forName(cls).getConstructor(android.content.Context::class.java).newInstance(context) as View
+        if (attach && root != null) root.addView(v)
+        return v
+    }
+    companion object { @JvmStatic fun from(c: android.content.Context) = LayoutInflater(c) }
+}
+class LayoutInflaterUnused
 object SoundEffectConstants { const val CLICK = 0 }

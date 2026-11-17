@@ -18,6 +18,11 @@ public interface HttpDataSource extends DataSource {
         public HttpDataSourceException(String m, DataSpec s, int reason, int type) { super(m, reason); dataSpec = s; this.type = type; }
         public HttpDataSourceException(java.io.IOException cause, DataSpec s, int reason, int type) { super(cause, reason); dataSpec = s; this.type = type; }
         public HttpDataSourceException(String m, java.io.IOException cause, DataSpec s, int reason, int type) { super(m, cause, reason); dataSpec = s; this.type = type; }
+        public static HttpDataSourceException createForIOException(java.io.IOException cause, DataSpec s, int type) {
+            int reason = cause instanceof java.net.SocketTimeoutException ? androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_TIMEOUT
+                : cause instanceof java.io.InterruptedIOException ? androidx.media3.common.PlaybackException.ERROR_CODE_FAILED_RUNTIME_CHECK : androidx.media3.common.PlaybackException.ERROR_CODE_IO_NETWORK_CONNECTION_FAILED;
+            return new HttpDataSourceException(cause, s, reason, type);
+        }
     }
     final class InvalidResponseCodeException extends HttpDataSourceException {
         public final int responseCode; public final String responseMessage; public final Map<String, List<String>> headerFields; public final byte[] responseBody;

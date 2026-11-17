@@ -19,6 +19,9 @@ class PackageManager private constructor() {
     fun setComponentEnabledSetting(c: ComponentName, state: Int, flags: Int) {}
     fun getComponentEnabledSetting(c: ComponentName): Int = COMPONENT_ENABLED_STATE_DEFAULT
     fun canRequestPackageInstalls(): Boolean = false
+    fun getPackagesForUid(uid: Int): Array<String>? = arrayOf("app.jam.android")
+    fun getInstallSourceInfo(pkg: String): InstallSourceInfo = InstallSourceInfo()
+    fun getNameForUid(uid: Int): String? = "app.jam.android"
     fun getApplicationLabel(info: ApplicationInfo): CharSequence = "Jam"
     fun getInstallerPackageName(pkg: String): String? = null
     val packageInstaller: PackageInstaller get() = PackageInstaller()
@@ -48,11 +51,13 @@ class ActivityInfo { @JvmField var packageName = ""; @JvmField var name = ""
     companion object { const val SCREEN_ORIENTATION_UNSPECIFIED = -1; const val SCREEN_ORIENTATION_PORTRAIT = 1; const val SCREEN_ORIENTATION_LANDSCAPE = 0
         const val SCREEN_ORIENTATION_SENSOR_LANDSCAPE = 6; const val SCREEN_ORIENTATION_USER = 2; const val SCREEN_ORIENTATION_FULL_USER = 13; const val SCREEN_ORIENTATION_LOCKED = 14
         const val SCREEN_ORIENTATION_SENSOR = 4; const val SCREEN_ORIENTATION_SENSOR_PORTRAIT = 7; const val SCREEN_ORIENTATION_USER_LANDSCAPE = 11; const val SCREEN_ORIENTATION_USER_PORTRAIT = 12 } }
-class PackageInstaller { fun createSession(p: SessionParams): Int = throw UnsupportedOperationException("no installs on the PC"); fun openSession(id: Int): Session = throw UnsupportedOperationException()
-    class SessionParams(mode: Int) { fun setAppPackageName(p: String?) {}; fun setSize(s: Long) {}; fun setRequireUserAction(r: Int) {}; fun setInstallReason(r: Int) {} }
+class PackageInstaller { fun abandonSession(id: Int) {}; fun createSession(p: SessionParams): Int = throw UnsupportedOperationException("no installs on the PC"); fun openSession(id: Int): Session = throw UnsupportedOperationException()
+    class SessionParams(mode: Int) { companion object { const val MODE_FULL_INSTALL = 1; const val MODE_INHERIT_EXISTING = 2 } fun setAppPackageName(p: String?) {}; fun setSize(s: Long) {}; fun setRequireUserAction(r: Int) {}; fun setInstallReason(r: Int) {} }
     class Session : java.io.Closeable { fun openWrite(n: String, o: Long, l: Long): java.io.OutputStream = throw UnsupportedOperationException(); fun fsync(o: java.io.OutputStream) {}
         fun commit(s: android.content.IntentSender) {}; fun abandon() {}; override fun close() {} }
     companion object { const val EXTRA_STATUS = "android.content.pm.extra.STATUS"; const val EXTRA_STATUS_MESSAGE = "android.content.pm.extra.STATUS_MESSAGE"; const val STATUS_SUCCESS = 0
-        const val STATUS_PENDING_USER_ACTION = -1; const val STATUS_FAILURE = 1; const val STATUS_FAILURE_ABORTED = 3; const val EXTRA_SESSION_ID = "android.content.pm.extra.SESSION_ID"
+        const val STATUS_PENDING_USER_ACTION = -1; const val STATUS_FAILURE = 1; const val STATUS_FAILURE_ABORTED = 3; const val STATUS_FAILURE_BLOCKED = 2; const val STATUS_FAILURE_INVALID = 4; const val STATUS_FAILURE_CONFLICT = 5; const val STATUS_FAILURE_STORAGE = 6; const val STATUS_FAILURE_INCOMPATIBLE = 7; const val EXTRA_SESSION_ID = "android.content.pm.extra.SESSION_ID"
         object SessionParamsModes; const val USER_ACTION_NOT_REQUIRED = 2 } }
 class ShortcutManager
+class InstallSourceInfo { val installingPackageName: String? = null; val initiatingPackageName: String? = null; val originatingPackageName: String? = null; val installingPackageSignature: Any? = null }
+object ServiceInfo { const val FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK = 2; const val FOREGROUND_SERVICE_TYPE_DATA_SYNC = 1; const val FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE = 16; const val FOREGROUND_SERVICE_TYPE_SPECIAL_USE = 0x40000000; const val FOREGROUND_SERVICE_TYPE_SHORT_SERVICE = 2048 }

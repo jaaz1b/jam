@@ -27,10 +27,12 @@ object DateUtils {
         val u = when (unit) { java.time.temporal.ChronoUnit.MINUTES -> if (abbrev) "min" else if (n == 1L) "minute" else "minutes"; java.time.temporal.ChronoUnit.HOURS -> if (abbrev) "hr" else if (n == 1L) "hour" else "hours"; else -> if (n == 1L) "day" else "days" }
         return if (past) "$n $u ago" else "in $n $u"
     }
+    @JvmStatic fun getRelativeTimeSpanString(time: Long, now: Long, minRes: Long): CharSequence = getRelativeTimeSpanString(time, now, minRes, 0)
     @JvmStatic fun getRelativeTimeSpanString(time: Long): CharSequence = getRelativeTimeSpanString(time, System.currentTimeMillis(), MINUTE_IN_MILLIS, 0)
     @JvmStatic fun formatDateTime(c: android.content.Context?, millis: Long, flags: Int): String =
         java.time.format.DateTimeFormatter.ofLocalizedDate(java.time.format.FormatStyle.MEDIUM).withLocale(app.jam.desktop.shim.Res.locale).format(java.time.Instant.ofEpochMilli(millis).atZone(java.time.ZoneId.systemDefault()))
     @JvmStatic fun formatElapsedTime(seconds: Long): String = if (seconds >= 3600) "%d:%02d:%02d".format(seconds / 3600, seconds / 60 % 60, seconds % 60) else "%02d:%02d".format(seconds / 60, seconds % 60)
     @JvmStatic fun isToday(t: Long): Boolean = java.time.Instant.ofEpochMilli(t).atZone(java.time.ZoneId.systemDefault()).toLocalDate() == java.time.LocalDate.now()
 }
-object DateFormat { @JvmStatic fun is24HourFormat(c: android.content.Context?): Boolean = !java.text.SimpleDateFormat.getTimeInstance(java.text.DateFormat.SHORT, app.jam.desktop.shim.Res.locale).let { it as? java.text.SimpleDateFormat }?.toPattern().orEmpty().contains('a') }
+object DateFormat {
+    @JvmStatic fun getBestDateTimePattern(l: java.util.Locale, skeleton: String): String = java.time.format.DateTimeFormatterBuilder.getLocalizedDateTimePattern(java.time.format.FormatStyle.MEDIUM, null, java.time.chrono.IsoChronology.INSTANCE, l) @JvmStatic fun is24HourFormat(c: android.content.Context?): Boolean = !java.text.SimpleDateFormat.getTimeInstance(java.text.DateFormat.SHORT, app.jam.desktop.shim.Res.locale).let { it as? java.text.SimpleDateFormat }?.toPattern().orEmpty().contains('a') }

@@ -28,12 +28,14 @@ object Ffmpeg {
         fun stop() { runCatching { process.destroyForcibly() }; runCatching { pcm.close() } }
     }
 
-    fun decode(url: String, startMs: Long, endMs: Long? = null, extraInput: List<String> = emptyList()): Decode {
+    fun decode(url: String, startMs: Long, endMs: Long? = null, extraInput: List<String> = emptyList(), native: Boolean = false): Decode {
         val args = mutableListOf(exe, "-hide_banner", "-nostdin", "-loglevel", "info", "-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "4")
         if (startMs > 0) args += listOf("-ss", "%.3f".format(java.util.Locale.ROOT, startMs / 1000.0))
         if (endMs != null) args += listOf("-to", "%.3f".format(java.util.Locale.ROOT, endMs / 1000.0))
         args += extraInput
-        args += listOf("-i", url, "-vn", "-sn", "-dn", "-map", "0:a:0?", "-ac", "$CHANNELS", "-ar", "$RATE", "-f", "s16le", "-acodec", "pcm_s16le", "pipe:1")
+        args += listOf("-i", url, "-vn", "-sn", "-dn", "-map", "0:a:0?")
+        if (!native) args += listOf("-ac", "$CHANNELS", "-ar", "$RATE")
+        args += listOf("-f", "s16le", "-acodec", "pcm_s16le", "pipe:1")
         val p = ProcessBuilder(args).start()
         val d = Decode(p, p.inputStream.buffered(256 * 1024))
         Thread({
@@ -51,6 +53,14 @@ object Ffmpeg {
                 }
             }
         }, "ffmpeg-log").apply { isDaemon = true }.start()
+        return d
+    }
+
+    /** What ffmpeg says of a file: duration (ms), codec, rate, channels, bitrate; none of its audio decoded. */
+    fun probe(url: String): Decode {
+        val d = decode(url, 0, extraInput = listOf("-t", "0"))
+        runCatching { d.pcm.readAllBytes(); d.process.waitFor(15, java.util.concurrent.TimeUnit.SECONDS) }
+        Thread.sleep(50)
         return d
     }
 

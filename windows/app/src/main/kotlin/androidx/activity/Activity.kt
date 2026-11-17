@@ -41,3 +41,8 @@ open class ComponentActivity : android.app.Activity()
 
 fun ComponentActivity.enableEdgeToEdge() {}
 fun android.app.Activity.enableEdgeToEdge(statusBarStyle: Any? = null, navigationBarStyle: Any? = null) {}
+
+fun OnBackPressedDispatcher.addCallback(owner: androidx.lifecycle.LifecycleOwner? = null, enabled: Boolean = true, onBackPressed: OnBackPressedCallback.() -> Unit): OnBackPressedCallback {
+    val cb = object : OnBackPressedCallback(enabled) { override fun handleOnBackPressed() = onBackPressed() }
+    addCallback(owner, cb); return cb
+}

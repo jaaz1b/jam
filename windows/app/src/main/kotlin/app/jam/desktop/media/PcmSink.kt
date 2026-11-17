@@ -102,7 +102,7 @@ class PcmSink(private val processors: Array<AudioProcessor>, private val bufferU
         stretch.speed = params.speed
         f = stretch.process(f, frames)
         if (skipSilence) f = dropSilence(f, ch)
-        val v = volume
+        val v = volume * Volume.level
         val out = ByteArray(f.size * 2)
         for (i in f.indices) {
             val s = (f[i] * v * 32767f).toInt().coerceIn(-32768, 32767)

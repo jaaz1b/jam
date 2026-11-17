@@ -2,3 +2,16 @@
 # Android-only parts (widgets, Android Auto, the watch, the TV, PiP, the phone's media session) and
 # the ones replaced by a PC version in src/main/kotlin (same class names and functions).
 com/music/spotui/data/DataSaverGlide.kt
+# Replaced by a PC version (windows/app/src/main/kotlin, same package and names):
+app/myspoti/host/android/CronetStack.kt
+app/myspoti/host/android/PlatformStack.kt
+com/music/spotui/data/offline/AacTranscoder.kt
+com/music/spotui/widget/NowPlayingWidget.kt
+# Android only (the watch link):
+com/music/spotui/wear/WearLinkService.kt
+# Spotify's own audio engine (Widevine through the phone's MediaDrm): the page plays on the PC.
+com/music/spotui/di/NativeAudio.kt
+# The immersive look's glass (Kyant's backdrop): its Skia side, as the library has it for desktop.
+com/music/spotui/ui/immersive/shell/backdrop/RuntimeShader.kt
+com/music/spotui/ui/immersive/shell/backdrop/internal/RenderEffect.kt
+com/music/spotui/ui/immersive/shell/backdrop/internal/Paint.kt

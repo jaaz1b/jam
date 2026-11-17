@@ -17,3 +17,7 @@ object ContextCompat {
 }
 object FileProvider { @JvmStatic fun getUriForFile(c: Context, authority: String, f: java.io.File): android.net.Uri = android.net.Uri.fromFile(f) }
 inline fun SharedPreferences.edit(commit: Boolean = false, action: SharedPreferences.Editor.() -> Unit) { val e = edit(); e.action(); if (commit) e.commit() else e.apply() }
+
+object IntentCompat {
+    @JvmStatic fun <T> getParcelableExtra(i: android.content.Intent, name: String, cls: Class<T>): T? = i.getParcelableExtra(name, cls)
+}

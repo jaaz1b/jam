@@ -1,0 +1,12 @@
+# Small changes the PC needs in the Android sources (applied when they are copied for the build; the
+# originals are untouched). Each line: <path in the copy> => <regex> => <replacement>.
+# Compose for Desktop's DialogProperties has no decorFitsSystemWindows (the window has no system bars).
+app/myspoti/MainActivity.kt => , decorFitsSystemWindows = false =>
+com/music/spotui/ui/components/AccountProviderSignIn.kt => , decorFitsSystemWindows = false =>
+com/music/spotui/ui/components/AddSongsScreen.kt => , decorFitsSystemWindows = false =>
+# Navigation's arguments are a SavedState on the PC (a Bundle on Android): read with the same getString.
+com/music/spotui/ui/navigation/MyNavHost.kt => ^package com.music.spotui.ui.navigation$ => package com.music.spotui.ui.navigation\nimport app.jam.desktop.compat.getString
+# Android-only text and lifecycle locals.
+com/music/spotui/ui/screens/PlayerScreen.kt => androidx.compose.ui.text.PlatformTextStyle\(includeFontPadding = false\) => null
+com/music/spotui/ui/screens/PlayerScreen.kt => androidx.compose.ui.platform.LocalLifecycleOwner => androidx.lifecycle.compose.LocalLifecycleOwner
+com/music/spotui/ui/tv/TvExtensions.kt => ^package com.music.spotui.ui.tv$ => package com.music.spotui.ui.tv\nimport app.jam.desktop.compat.getString

@@ -108,8 +108,14 @@ abstract class Context {
 }
 
 open class ContextWrapper(base: Context?) : Context() {
-    private val wrapped: Context? = base
-    val baseContext: Context get() = wrapped ?: app.jam.desktop.shim.DesktopApp.context
+    protected var wrapped: Context? = base
+    open val baseContext: Context get() = wrapped ?: app.jam.desktop.shim.DesktopApp.context
+}
+/** A context whose base can be changed (a web view kept across activities). */
+class MutableContextWrapper(base: Context?) : ContextWrapper(base) {
+    override var baseContext: Context
+        get() = wrapped ?: app.jam.desktop.shim.DesktopApp.context
+        set(v) { wrapped = v }
 }
 
 interface ServiceConnection {
