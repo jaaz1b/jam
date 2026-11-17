@@ -10,7 +10,7 @@ name: Jam for Windows
 
 on:
   push:
-    branches: [main]
+    branches: [main, jam-windows]
     paths:
       - 'android/base/desktop/**'
       - 'android/base/host-cdp/**'
