@@ -233,8 +233,9 @@ class Page(private val view: WebView) {
     fun wheel(x: Float, y: Float, dx: Float, dy: Float) = run { c ->
         c.fire("Input.dispatchMouseEvent", json("type" to "mouseWheel", "x" to x.toDouble(), "y" to y.toDouble(), "deltaX" to dx.toDouble(), "deltaY" to dy.toDouble()))
     }
-    fun key(type: String, key: String, code: String, vk: Int, modifiers: Int, text: String?) = run { c ->
+    fun key(type: String, key: String, code: String, vk: Int, modifiers: Int, text: String?, commands: List<String> = emptyList()) = run { c ->
         val p = json("type" to type, "key" to key, "code" to code, "windowsVirtualKeyCode" to vk, "nativeVirtualKeyCode" to vk, "modifiers" to modifiers)
+        if (commands.isNotEmpty()) p.put("commands", org.json.JSONArray(commands))
         if (text != null) { p.put("text", text); p.put("unmodifiedText", text) }
         c.call("Input.dispatchKeyEvent", p).whenComplete { _, err -> if (err != null && keyErrors++ < 10) Desk.log('W', "Page", "key event refused: $err", null) }
     }

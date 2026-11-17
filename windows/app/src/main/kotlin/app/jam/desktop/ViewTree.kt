@@ -21,6 +21,14 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.nativeKeyCode
+import androidx.compose.ui.input.key.type
+import androidx.compose.ui.input.key.utf16CodePoint
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerEventType
@@ -112,8 +120,7 @@ fun WebSurface(view: WebView, modifier: Modifier) {
             }
         }
         .onKeyEvent { ev ->
-            val awt = ev.nativeKeyEvent as? java.awt.event.KeyEvent ?: run { app.jam.desktop.shim.Desk.log('W', "Keys", "not an AWT key event: ${ev.nativeKeyEvent?.javaClass}", null); return@onKeyEvent false }
-            Keys.send(page, ev.type, awt); true
+            Keys.send(page, ev); true
         }
     ) {
         page.frame.value?.let { Image(it, null, Modifier.fillMaxSize(), contentScale = ContentScale.FillBounds) }
@@ -131,32 +138,42 @@ object Keys {
     private val vk = mapOf(10 to 13, 127 to 46)
     @Volatile private var textSent = false
     @Volatile private var logged = 0
-    fun send(page: app.jam.desktop.web.Page, type: KeyEventType, e: java.awt.event.KeyEvent) {
-        val mods = (if (e.isAltDown) 1 else 0) or (if (e.isControlDown) 2 else 0) or (if (e.isMetaDown) 4 else 0) or (if (e.isShiftDown) 8 else 0)
-        val code = vk[e.keyCode] ?: e.keyCode
-        val name = names[e.keyCode]
-        val ch = e.keyChar
-        val printable = ch != java.awt.event.KeyEvent.CHAR_UNDEFINED && !ch.isISOControl() && (mods and 2) == 0
-        if (logged < 40) { logged++; app.jam.desktop.shim.Desk.log('D', "Keys", "$type id=${e.id} code=${e.keyCode} char=${ch.code} mods=$mods", null) }
-        when (type) {
+    /** A key from Compose (an AWT event under Linux, Compose's own under Windows): to the page. */
+    fun send(page: app.jam.desktop.web.Page, ev: androidx.compose.ui.input.key.KeyEvent) {
+        val awt = ev.nativeKeyEvent as? java.awt.event.KeyEvent
+        val mods = (if (ev.isAltPressed) 1 else 0) or (if (ev.isCtrlPressed) 2 else 0) or (if (ev.isMetaPressed) 4 else 0) or (if (ev.isShiftPressed) 8 else 0)
+        val keyCode = awt?.keyCode ?: ev.key.nativeKeyCode
+        val code = vk[keyCode] ?: keyCode
+        val name = names[keyCode]
+        val cp = ev.utf16CodePoint.takeIf { it > 0 } ?: awt?.keyChar?.takeIf { it != java.awt.event.KeyEvent.CHAR_UNDEFINED }?.code ?: 0
+        val ch = if (cp > 0) String(Character.toChars(cp)) else ""
+        val printable = cp >= 32 && cp != 127 && (mods and 2) == 0
+        if (logged < 30) { logged++; app.jam.desktop.shim.Desk.log('D', "Keys", "${ev.type} key=$keyCode cp=$cp mods=$mods", null) }
+        when (ev.type) {
             KeyEventType.KeyDown -> {
-                val text = when { printable -> ch.toString(); e.keyCode == 10 -> "\r"; else -> null }
                 textSent = printable
-                // A character goes in as text (as an IME commits it), after its key's own event: it
-                // does not depend on the browser turning the key into a character itself.
-                if (printable) { page.key("rawKeyDown", ch.toString(), awtCode(e), code, mods, null); page.insertText(ch.toString()) }
-                else page.key(if (text != null) "keyDown" else "rawKeyDown", name ?: "", awtCode(e), code, mods, text)
+                val ctrl = (mods and 2) != 0 && (mods and 1) == 0
+                when {
+                    // Edit shortcuts: the page's own commands (a key event alone does not run them).
+                    ctrl && keyCode == java.awt.event.KeyEvent.VK_V -> app.jam.desktop.shim.Clip.get()?.let { page.insertText(it) }
+                    ctrl && keyCode == java.awt.event.KeyEvent.VK_A -> page.key("rawKeyDown", "a", "KeyA", 65, mods, null, listOf("selectAll"))
+                    ctrl && keyCode == java.awt.event.KeyEvent.VK_C -> page.key("rawKeyDown", "c", "KeyC", 67, mods, null, listOf("copy"))
+                    ctrl && keyCode == java.awt.event.KeyEvent.VK_X -> page.key("rawKeyDown", "x", "KeyX", 88, mods, null, listOf("cut"))
+                    ctrl && keyCode == java.awt.event.KeyEvent.VK_Z -> page.key("rawKeyDown", "z", "KeyZ", 90, mods, null, listOf(if ((mods and 8) != 0) "redo" else "undo"))
+                    // A character goes in as text (as an IME commits it), after its key's own event.
+                    printable -> { page.key("rawKeyDown", ch, domCode(keyCode), code, mods, null); page.insertText(ch) }
+                    else -> page.key(if (keyCode == 10) "keyDown" else "rawKeyDown", name ?: "", domCode(keyCode), code, mods, if (keyCode == 10) "\r" else null)
+                }
             }
-            KeyEventType.KeyUp -> page.key("keyUp", name ?: if (printable) ch.toString() else "", awtCode(e), code, mods, null)
-            // The typed character (AWT's KEY_TYPED) when the key press did not carry it: keyboard
-            // layouts and dead keys (é, ñ) on Windows give the character only there.
-            else -> if (e.id == java.awt.event.KeyEvent.KEY_TYPED && !textSent && ch != java.awt.event.KeyEvent.CHAR_UNDEFINED && !ch.isISOControl() && (mods and 2) == 0) page.insertText(ch.toString())
-                else if (e.id == java.awt.event.KeyEvent.KEY_TYPED) textSent = false
+            KeyEventType.KeyUp -> page.key("keyUp", name ?: ch, domCode(keyCode), code, mods, null)
+            // A character that came on its own (typed after the key press: layouts, dead keys).
+            else -> if (!textSent && printable) page.insertText(ch) else textSent = false
         }
     }
-    private fun awtCode(e: java.awt.event.KeyEvent): String = when (e.keyCode) {
-        in java.awt.event.KeyEvent.VK_A..java.awt.event.KeyEvent.VK_Z -> "Key" + e.keyCode.toChar()
-        in java.awt.event.KeyEvent.VK_0..java.awt.event.KeyEvent.VK_9 -> "Digit" + e.keyCode.toChar()
-        else -> names[e.keyCode] ?: ""
+    private fun domCode(k: Int): String = when (k) {
+        in java.awt.event.KeyEvent.VK_A..java.awt.event.KeyEvent.VK_Z -> "Key" + k.toChar()
+        in java.awt.event.KeyEvent.VK_0..java.awt.event.KeyEvent.VK_9 -> "Digit" + k.toChar()
+        32 -> "Space"
+        else -> names[k] ?: ""
     }
 }
