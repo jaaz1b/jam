@@ -101,6 +101,18 @@ class Page(private val view: WebView) {
         }
     }
 
+    /**
+     * Input, in the order it happened: sent from the caller's thread (sending only queues it on the
+     * socket), never through the pool, whose threads reordered keys ("signin.check" arrived as
+     * "signicn.heck").
+     */
+    private fun input(block: (Cdp) -> Unit) {
+        synchronized(waiting) {
+            val c = cdp
+            if (c != null && !c.closed) runCatching { block(c) } else { waiting += block; ensure() }
+        }
+    }
+
     private fun run(block: (Cdp) -> Unit) {
         synchronized(waiting) {
             val c = cdp
@@ -227,20 +239,20 @@ class Page(private val view: WebView) {
             frame.value = null
         }
     }
-    fun mouse(type: String, x: Float, y: Float, button: String = "none", clicks: Int = 0, modifiers: Int = 0, buttons: Int = 0) = run { c ->
+    fun mouse(type: String, x: Float, y: Float, button: String = "none", clicks: Int = 0, modifiers: Int = 0, buttons: Int = 0) = input { c ->
         c.fire("Input.dispatchMouseEvent", json("type" to type, "x" to x.toDouble(), "y" to y.toDouble(), "button" to button, "clickCount" to clicks, "modifiers" to modifiers, "buttons" to buttons))
     }
-    fun wheel(x: Float, y: Float, dx: Float, dy: Float) = run { c ->
+    fun wheel(x: Float, y: Float, dx: Float, dy: Float) = input { c ->
         c.fire("Input.dispatchMouseEvent", json("type" to "mouseWheel", "x" to x.toDouble(), "y" to y.toDouble(), "deltaX" to dx.toDouble(), "deltaY" to dy.toDouble()))
     }
-    fun key(type: String, key: String, code: String, vk: Int, modifiers: Int, text: String?, commands: List<String> = emptyList()) = run { c ->
+    fun key(type: String, key: String, code: String, vk: Int, modifiers: Int, text: String?, commands: List<String> = emptyList()) = input { c ->
         val p = json("type" to type, "key" to key, "code" to code, "windowsVirtualKeyCode" to vk, "nativeVirtualKeyCode" to vk, "modifiers" to modifiers)
         if (commands.isNotEmpty()) p.put("commands", org.json.JSONArray(commands))
         if (text != null) { p.put("text", text); p.put("unmodifiedText", text) }
         c.call("Input.dispatchKeyEvent", p).whenComplete { _, err -> if (err != null && keyErrors++ < 10) Desk.log('W', "Page", "key event refused: $err", null) }
     }
     @Volatile private var keyErrors = 0
-    fun insertText(text: String) = run { it.fire("Input.insertText", json("text" to text)) }
+    fun insertText(text: String) = input { it.fire("Input.insertText", json("text" to text)) }
 
     // ---- events
     private fun client() = view.getWebViewClient()
