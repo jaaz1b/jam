@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.LibraryMusic
 import androidx.compose.material.icons.rounded.Lyrics
 import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.People
+import androidx.compose.material.icons.rounded.PictureInPictureAlt
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.QueueMusic
@@ -336,6 +337,7 @@ private fun PlayerBar() {
             Studio.bigPicture.value = !Studio.bigPicture.value
         }
         Glyph(Icons.Rounded.QueueMusic, "Queue", size = 20.dp) { Studio.open(Routes.Queue.route) }
+        Glyph(Icons.Rounded.PictureInPictureAlt, "Mini player (Ctrl M)", active = MiniPlayer.open.value, size = 19.dp) { MiniPlayer.toggle() }
         Spacer(Modifier.width(6.dp))
         Volume(Modifier.width(112.dp))
     }

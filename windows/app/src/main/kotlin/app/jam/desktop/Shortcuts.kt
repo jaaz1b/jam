@@ -13,7 +13,7 @@ import com.music.spotui.ui.navigation.Routes
 
 /**
  * Jam's keyboard, as a desktop music app has it:
- * Space play/pause · Ctrl+→/← next/previous · Ctrl+↑/↓ volume · Ctrl+L Big Picture (lyrics) ·
+ * Space play/pause · Ctrl+→/← next/previous · Ctrl+↑/↓ volume · Ctrl+L Big Picture (lyrics) · Ctrl+M mini player ·
  * Ctrl+F search · Ctrl+, settings · F11 full screen · Ctrl+Q quit.
  */
 object Shortcuts {
@@ -28,6 +28,7 @@ object Shortcuts {
             Key.DirectionUp -> Now.volume = (Now.volume + 10).coerceAtMost(100)
             Key.DirectionDown -> Now.volume = (Now.volume - 10).coerceAtLeast(0)
             Key.L -> Studio.bigPicture.value = !Studio.bigPicture.value
+            Key.M -> app.jam.desktop.studio.MiniPlayer.toggle()
             Key.F -> Studio.open(Routes.Search.route)
             Key.Comma -> Studio.open(Routes.Settings.route)
             Key.Q -> { quit(); return true }

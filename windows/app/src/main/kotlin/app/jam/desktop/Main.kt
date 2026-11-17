@@ -31,6 +31,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.Tray
+import app.jam.desktop.studio.MiniPlayerWindow
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -89,11 +90,13 @@ fun main(args: Array<String>) {
                 Item(if (now.playing) "Pause" else "Play", enabled = now.title != null, onClick = { SystemMedia.button(if (now.playing) "pause" else "play") })
                 Item("Next", enabled = now.title != null, onClick = { SystemMedia.button("next") })
                 Item("Previous", enabled = now.title != null, onClick = { SystemMedia.button("previous") })
+                Item("Mini player", onClick = { app.jam.desktop.studio.MiniPlayer.toggle() })
                 Separator()
                 CheckboxItem("Keep playing when the window is closed", checked = Front.toTray.value, onCheckedChange = { Front.setToTray(it) })
                 Item("Quit Jam", onClick = { quit(); exitApplication() })
             },
         )
+        MiniPlayerWindow()
         Window(
             onCloseRequest = { if (Front.toTray.value) Front.hide() else { quit(); exitApplication() } },
             visible = Front.shown.value,
@@ -108,7 +111,7 @@ fun main(args: Array<String>) {
             },
             onKeyEvent = { e -> Front.window?.let { w -> Shortcuts.handle(e, w) } ?: false },
         ) {
-            LaunchedEffect(Unit) { Front.window = window; DarkTitleBar.apply(window); window.minimumSize = java.awt.Dimension(420, 640) }
+            LaunchedEffect(Unit) { Front.window = window; DarkTitleBar.apply(window); window.minimumSize = java.awt.Dimension(720, 560) }
             ActivityWindow(activity.value, Modifier.onPointerEvent(PointerEventType.Press) { e ->
                 val b = (e.nativeEvent as? java.awt.event.MouseEvent)?.button
                 if (b == 4) back(activity.value)
