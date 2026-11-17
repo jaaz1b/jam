@@ -246,6 +246,15 @@ jobs:
           $p = Start-Process -FilePath $app.FullName -PassThru
           Start-Sleep -Seconds 45
           Shot "spotify-sign-in"
+          # Does Spotify take a sign-in from Jam's page? An address that has no account: the next step
+          # (password / sign up) means it does; "Oops! Something went wrong" means it refuses Jam.
+          [W.M]::SetCursorPos([int]($b.Width / 2), [int]($b.Height * 0.404)); [W.M]::mouse_event(2, 0, 0, 0, 0); [W.M]::mouse_event(4, 0, 0, 0, 0)
+          Start-Sleep -Seconds 1
+          [System.Windows.Forms.SendKeys]::SendWait("jam.signin.check.$env:GITHUB_RUN_ID@outlook.com")
+          Start-Sleep -Seconds 1
+          [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+          Start-Sleep -Seconds 12
+          Shot "spotify-after-email"
           "---- typing runs" | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
           Get-Content "$env:LOCALAPPDATA\Jam\App\jam.log" -Tail 40 -ErrorAction SilentlyContinue | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
