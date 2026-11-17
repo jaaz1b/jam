@@ -43,3 +43,5 @@ include(":wear")
 include(":pass")
 // Jam: YouTube Music mode (Jam for Android's Tauri app), a library of :app. See ytm/build.gradle.kts.
 include(":ytm")
+// Jam for Windows (Compose for Desktop over :host-cdp). See desktop/build.gradle.kts.
+include(":desktop")

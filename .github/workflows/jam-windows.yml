@@ -1,0 +1,202 @@
+# Jam for Windows: the Jam app for the PC, like Jam for Android. A Compose window in Jam's look over
+# Orpheon's Spotify API, which plays through the Spotify Web Player in a hidden Microsoft Edge
+# (android/base/desktop), plus YouTube Music mode: Jam's YouTube Music engine (ytm/, jam-ytm.exe),
+# built here and shipped inside the app. Not the Electron app (desktop/, windows.yml).
+#
+# Publishes a pre-release jam-windows-v1.0.<run> with Jam-<version>.msi and .exe, and a screenshot
+# of the app's first start on the runner.
+
+name: Jam for Windows
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'android/base/desktop/**'
+      - 'android/base/host-cdp/**'
+      - 'android/base/api/**'
+      - 'android/base/api-spotify/**'
+      - 'android/base/api-web/**'
+      - 'android/base/engine/**'
+      - 'android/base/gradle/**'
+      - 'ytm/src/**'
+      - 'ytm/src-tauri/src/**'
+      - 'ytm/ui/src/**'
+      - '.github/workflows/jam-windows.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: jam-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  MPV_DEV_URL: https://github.com/SimoHypers/limusic/releases/download/deps/libmpv-2-x86_64-20260610-git-304426c.7z
+  MPV_DEV_SHA256: af708edcdf6ed12ac7b2bb31b4cbeba0bf7d4eef345a715ef5de782c0ddd6671
+  MPV_DIR: ${{ github.workspace }}\.libmpv
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 100
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: ytm/ui/pnpm-lock.yaml
+
+      # ---------------------------------------------------------------- YouTube Music engine (ytm/)
+
+      - name: Engine UI (Svelte)
+        shell: bash
+        run: cd ytm/ui && pnpm install --frozen-lockfile && pnpm build
+
+      - name: Rust (MSVC)
+        shell: bash
+        run: rustup default stable-msvc
+
+      # Before rust-cache on purpose: RUSTFLAGS is part of the cache key (see upstream's notes).
+      - name: RUSTFLAGS (libmpv link path + rust-lld)
+        shell: bash
+        run: |
+          set -euo pipefail
+          FLAGS="-L native=${{ github.workspace }}\.libmpv"
+          SYSROOT="$(rustc --print sysroot | tr '\\' '/')"
+          RUST_LLD="$SYSROOT/lib/rustlib/x86_64-pc-windows-msvc/bin/rust-lld.exe"
+          if [ -f "$RUST_LLD" ]; then FLAGS="$FLAGS -C linker-flavor=lld-link -C linker=$RUST_LLD"; fi
+          echo "RUSTFLAGS=$FLAGS" >> "$GITHUB_ENV"
+
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: ytm -> target
+
+      - name: Tauri CLI
+        shell: bash
+        run: npm install -g "@tauri-apps/cli@2.11.5"
+
+      - name: libmpv import library
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "$env:MPV_DIR" | Out-Null
+          curl.exe -fsSL -o "$env:MPV_DIR\mpv-dev.7z" "$env:MPV_DEV_URL"
+          if ((Get-FileHash "$env:MPV_DIR\mpv-dev.7z" -Algorithm SHA256).Hash -ne $env:MPV_DEV_SHA256) { throw "mpv-dev.7z checksum mismatch" }
+          7z x "$env:MPV_DIR\mpv-dev.7z" -o"$env:MPV_DIR" -y | Out-Null
+          if (-not (Test-Path "$env:MPV_DIR\libmpv-2.dll")) { throw "libmpv-2.dll missing from the dev package" }
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -products * -property installationPath
+          Import-Module "$vs\Common7\Tools\Microsoft.VisualStudio.DevShell.dll"
+          Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
+          Set-Location "$env:MPV_DIR"
+          $names = & dumpbin /exports libmpv-2.dll |
+            Select-String -Pattern '^\s+\d+\s+[0-9A-Fa-f]+\s+[0-9A-Fa-f]+\s+(\w+)' |
+            ForEach-Object { $_.Matches[0].Groups[1].Value }
+          if ($names.Count -lt 50) { throw "parsed only $($names.Count) exports from libmpv-2.dll" }
+          @("EXPORTS") + ($names | ForEach-Object { "    $_" }) | Set-Content -Path mpv.def -Encoding ascii
+          & lib /def:mpv.def /name:libmpv-2.dll /out:mpv.lib /machine:x64
+          if (-not (Test-Path "$env:MPV_DIR\mpv.lib")) { throw "lib.exe did not produce mpv.lib" }
+          Copy-Item "$env:MPV_DIR\libmpv-2.dll" "$env:GITHUB_WORKSPACE\ytm\src-tauri\libmpv-2.dll" -Force
+
+      # Snapshot of the community player-cipher registry, as upstream does. Never fatal: the engine
+      # refreshes it at runtime anyway.
+      - name: Player-cipher registry snapshot
+        shell: bash
+        run: |
+          for url in https://raw.githubusercontent.com/MetrolistGroup/faraday/master/registry/player_configs.json \
+                     https://raw.githubusercontent.com/ZemerTeam/zemer-cipher/master/library/src/main/assets/player_configs.json; do
+            if curl -fsSL --max-time 30 "$url" -o /tmp/pc.json && jq -e '(.players | objects | length) > 0' /tmp/pc.json >/dev/null 2>&1; then
+              cp /tmp/pc.json ytm/src-tauri/cipher_configs.json; echo "bundled from $url"; exit 0
+            fi
+          done
+          echo "::warning::no player-cipher registry reachable; the engine fetches it at runtime"
+
+      - name: Last.fm API keys (optional)
+        shell: bash
+        env:
+          LASTFM_API_KEY: ${{ secrets.LASTFM_API_KEY }}
+          LASTFM_API_SECRET: ${{ secrets.LASTFM_API_SECRET }}
+        run: |
+          if [ -n "$LASTFM_API_KEY" ] && [ -n "$LASTFM_API_SECRET" ]; then
+            printf 'LIMUSIC_LASTFM_API_KEY=%s\nLIMUSIC_LASTFM_API_SECRET=%s\n' "$LASTFM_API_KEY" "$LASTFM_API_SECRET" > ytm/src-tauri/lastfm.keys
+          else
+            echo "::warning::LASTFM_API_KEY / LASTFM_API_SECRET not set: YouTube Music builds without Last.fm (ListenBrainz still works)"
+          fi
+
+      - name: Build the engine
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd ytm
+          tauri build --no-bundle --config '{"build":{"beforeBuildCommand":""}}'
+          ls -la target/release/*.exe
+
+      - name: Stage the engine in the app (YouTube Music mode)
+        shell: bash
+        run: |
+          set -euo pipefail
+          D=android/base/desktop/app-resources/windows/jam-ytm
+          mkdir -p "$D"
+          cp ytm/target/release/jam-ytm.exe ytm/src-tauri/libmpv-2.dll "$D"/
+          cp LICENSE "$D"/LICENSE.txt
+          ls -la "$D"
+
+      # ---------------------------------------------------------------- The Jam app (android/base/desktop)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Build the installers
+        id: pkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="1.0.${GITHUB_RUN_NUMBER}"
+          cd android/base
+          ./gradlew :desktop:packageMsi :desktop:packageExe :desktop:createDistributable --stacktrace -PjamWinVersion="$VERSION"
+          mkdir -p ../../out
+          find desktop/build/compose/binaries -name "*.msi" -exec cp {} "../../out/Jam-${VERSION}.msi" \;
+          find desktop/build/compose/binaries -name "*.exe" -path "*exe*" -not -path "*/app/*" -exec cp {} "../../out/Jam-${VERSION}-setup.exe" \;
+          ls -la ../../out
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      # First start on the runner (signed out): the window, and the hidden Edge it starts.
+      - name: Try it
+        shell: pwsh
+        run: |
+          $app = Get-ChildItem -Recurse android/base/desktop/build/compose/binaries -Filter Jam.exe | Where-Object { $_.FullName -match '\\app\\' } | Select-Object -First 1
+          if (-not $app) { throw "Jam.exe not found" }
+          $p = Start-Process -FilePath $app.FullName -PassThru
+          Start-Sleep -Seconds 45
+          Add-Type -AssemblyName System.Windows.Forms,System.Drawing
+          $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+          $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+          [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+          $bmp.Save("$env:GITHUB_WORKSPACE\out\first-start.png")
+          "Jam running: $(-not $p.HasExited)" | Tee-Object "$env:GITHUB_WORKSPACE\out\first-start.txt"
+          Get-Process msedge -ErrorAction SilentlyContinue | Measure-Object | ForEach-Object { "Edge processes: $($_.Count)" } | Tee-Object -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+          Get-Content "$env:LOCALAPPDATA\Jam\App\browser.log" -Tail 20 -ErrorAction SilentlyContinue | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+
+      - name: Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.pkg.outputs.version }}
+        run: |
+          gh release create "jam-windows-v${VERSION}" out/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
+            --title "Jam for Windows ${VERSION}" \
+            --notes "Jam for Windows, like Jam for Android: Spotify through a hidden Microsoft Edge (Orpheon's engine), YouTube Music mode (Settings), Discord status. Install with Jam-${VERSION}.msi (or the -setup.exe). Needs Microsoft Edge or Google Chrome (every Windows 10/11 PC has Edge). first-start.png is the app on the build machine."

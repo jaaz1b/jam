@@ -18,6 +18,8 @@ on:
       - 'android/**'
       - 'ytm/**'
       - '.github/workflows/android.yml'
+      # Jam for Windows' own module (jam-windows.yml builds it).
+      - '!android/base/desktop/**'
   workflow_dispatch:
 
 permissions:
