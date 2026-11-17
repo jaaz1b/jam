@@ -569,14 +569,22 @@ object OfflineDownloader {
     private suspend fun fetchWithProgress(trackId: String, url: String, out: File, headers: Map<String, String> = emptyMap()): Boolean {
         // A quick HEAD for the size: the progress bar needs it (-1 when the server says nothing).
         val total = runInterruptible(Dispatchers.IO) { contentLength(url, headers) }
+        // Jam: bytes written by the parallel download (its file is full-size from the start).
+        val written = java.util.concurrent.atomic.AtomicLong(-1L)
         val watcher = if (total > 0) scope.launch {
             while (isActive) {
-                setStatus(trackId, OfflineStatus.Downloading((out.length().toFloat() / total).coerceIn(0f, 1f)))
+                val have = written.get().takeIf { it >= 0 } ?: out.length()
+                setStatus(trackId, OfflineStatus.Downloading((have.toFloat() / total).coerceIn(0f, 1f)))
                 delay(400)
             }
         } else null
         try {
-            return runInterruptible(Dispatchers.IO) { rangedDownload(url, out, total, headers) }
+            // Jam: a big file of known size comes in parallel parts (file hosts often cap each
+            // connection); if the server or a part says no, the one-connection loop starts over.
+            return runInterruptible(Dispatchers.IO) {
+                (total >= PARALLEL_MIN && parallelDownload(url, out, total, headers, written)) ||
+                    rangedDownload(url, out, total, headers).also { written.set(-1L) }
+            }
         } finally {
             watcher?.cancel()
             setStatus(trackId, OfflineStatus.Downloading(-1f))
@@ -649,6 +657,98 @@ object OfflineDownloader {
             }
         }
         return true
+    }
+
+    /** Jam: files from this size on come in [PARALLEL_PARTS] parts at once. */
+    private const val PARALLEL_MIN = 6L * 1024 * 1024
+    private const val PARALLEL_PARTS = 4
+
+    /**
+     * Jam: [out] (of [total] bytes) in [PARALLEL_PARTS] byte ranges at once, each on its own
+     * connection, in 2 MB requests retried three times, every part checked like
+     * [rangedDownload]'s (a 206 with exactly the bytes asked for). False when it can't (the server
+     * ignores Range, a part keeps failing): the caller then downloads it in one go. A refusal of
+     * the safe client (a host an extension may not reach) is thrown, as in [rangedDownload].
+     */
+    internal fun parallelDownload(url: String, out: File, total: Long, headers: Map<String, String>, written: java.util.concurrent.atomic.AtomicLong): Boolean {
+        java.io.RandomAccessFile(out, "rw").use { it.setLength(total) }
+        written.set(0L)
+        val part = (total + PARALLEL_PARTS - 1) / PARALLEL_PARTS
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(PARALLEL_PARTS)
+        val ok = try {
+            val futures = (0 until PARALLEL_PARTS).map { i ->
+                val from = i * part
+                val to = minOf(total, from + part) - 1
+                pool.submit(java.util.concurrent.Callable { if (from <= to) fetchPart(url, out, from, to, headers, written) })
+            }
+            futures.forEach { it.get() }
+            true
+        } catch (e: InterruptedException) {
+            pool.shutdownNow(); throw e
+        } catch (e: java.util.concurrent.ExecutionException) {
+            val cause = e.cause
+            if (cause is app.myspoti.extensions.ExtensionMediaHttp.Refused || (cause is IOException && app.myspoti.extensions.SafeNet.isRefusal(cause))) {
+                pool.shutdownNow(); throw cause
+            }
+            Log.w(TAG, "parallel download stopped (${cause?.message}): one connection instead")
+            false
+        } finally {
+            pool.shutdownNow()
+        }
+        if (!ok) { written.set(-1L); out.delete() }
+        return ok
+    }
+
+    private class NoRange : IOException("the server ignores Range")
+
+    /** Bytes [from]..[to] of [url] into [out] at their place, 2 MB per request. */
+    private fun fetchPart(url: String, out: File, from: Long, to: Long, headers: Map<String, String>, written: java.util.concurrent.atomic.AtomicLong) {
+        val step = 2L * 1024 * 1024
+        java.io.RandomAccessFile(out, "rw").use { output ->
+            var position = from
+            while (position <= to) {
+                if (Thread.currentThread().isInterrupted) throw InterruptedException()
+                yieldToPlayer()
+                val end = minOf(to, position + step - 1)
+                var attempt = 0
+                while (true) {
+                    attempt++
+                    val start = position
+                    try {
+                        MediaHttp.open(url, headers = headers, fixed = mapOf("User-Agent" to DownloadUa, "Range" to "bytes=$start-$end"), timeoutMs = 60_000).use { conn ->
+                            val code = conn.response.code
+                            if (code == 200) throw NoRange()
+                            if (code != 206) throw IOException("stream HTTP $code")
+                            val span = contentRangeSpan(conn.response.header("Content-Range"))
+                            if (span == null || span.first != start || span.last > end)
+                                throw IOException("stream sent ${conn.response.header("Content-Range") ?: "no Content-Range"} for bytes $start-$end")
+                            output.seek(start)
+                            val expected = end - start + 1
+                            var got = 0L
+                            conn.response.body.byteStream().use { input ->
+                                val buf = ByteArray(128 * 1024)
+                                while (got < expected) {
+                                    val n = input.read(buf)
+                                    if (n < 0) break
+                                    val keep = minOf(n.toLong(), expected - got).toInt()
+                                    output.write(buf, 0, keep)
+                                    got += keep
+                                    position += keep // a retry resumes here
+                                    written.addAndGet(keep.toLong())
+                                }
+                            }
+                            if (got < expected) throw IOException("stream ended at ${start + got} of $end")
+                        }
+                        break
+                    } catch (e: NoRange) {
+                        throw e
+                    } catch (e: IOException) {
+                        if (attempt >= 3 || e is app.myspoti.extensions.ExtensionMediaHttp.Refused || app.myspoti.extensions.SafeNet.isRefusal(e)) throw e
+                        Log.w(TAG, "part at $position failed (attempt $attempt): ${e.message}")
+                    }
+                }
+            }
+        }
     }
 
     /**

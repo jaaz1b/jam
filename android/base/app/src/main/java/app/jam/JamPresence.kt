@@ -17,7 +17,7 @@ object JamPresence {
                 title = it.title,
                 artist = it.artist,
                 album = it.album,
-                artwork = it.coverUrl?.takeIf { u -> u.startsWith("https://") && u.length <= 512 },
+                artwork = artwork(it)?.takeIf { u -> u.startsWith("https://") && u.length <= 512 },
                 playing = it.playing,
                 position = if (it.positionMs >= 0) it.positionMs / 1000.0 else null,
                 duration = if (it.durationMs > 0) it.durationMs / 1000.0 else null,
@@ -31,6 +31,25 @@ object JamPresence {
         if (same(np, last)) return
         last = np
         app.jam.android.Player.reportSpotify(np)
+    }
+
+    /**
+     * The cover Discord can show: a web address. A downloaded song plays with its saved cover (a file
+     * on the phone, which Discord can't load), so its download record's original address is used.
+     */
+    private fun artwork(info: NowPlayingInfo): String? {
+        val cover = info.coverUrl
+        if (cover != null && cover.startsWith("https://")) return cover
+        val tracks = com.music.spotui.data.offline.OfflineStore.tracks
+        val byFile = cover?.takeIf { it.startsWith("file:") }?.substringAfterLast('/')?.substringBeforeLast('.')
+        val byId = info.id.substringAfterLast(':')
+        val t = runCatching {
+            byFile?.let { tracks[it] } ?: tracks[byId]
+                ?: tracks.values.firstOrNull { o -> o.title == info.title && o.artist == info.artist }
+        }.getOrNull()
+        return t?.coverUrl?.takeIf { it.isNotBlank() }?.let {
+            runCatching { app.myspoti.host.android.Covers.large(it) }.getOrDefault(it)
+        }?.replaceFirst("http://", "https://") ?: cover
     }
 
     /** "spotify:track:ID" → its open.spotify.com page (the "Listen on" button); else Spotify's home. */
