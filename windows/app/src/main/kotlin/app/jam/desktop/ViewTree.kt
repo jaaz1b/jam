@@ -112,7 +112,7 @@ fun WebSurface(view: WebView, modifier: Modifier) {
             }
         }
         .onKeyEvent { ev ->
-            val awt = ev.nativeKeyEvent as? java.awt.event.KeyEvent ?: return@onKeyEvent false
+            val awt = ev.nativeKeyEvent as? java.awt.event.KeyEvent ?: run { app.jam.desktop.shim.Desk.log('W', "Keys", "not an AWT key event: ${ev.nativeKeyEvent?.javaClass}", null); return@onKeyEvent false }
             Keys.send(page, ev.type, awt); true
         }
     ) {
@@ -130,17 +130,22 @@ object Keys {
     )
     private val vk = mapOf(10 to 13, 127 to 46)
     @Volatile private var textSent = false
+    @Volatile private var logged = 0
     fun send(page: app.jam.desktop.web.Page, type: KeyEventType, e: java.awt.event.KeyEvent) {
         val mods = (if (e.isAltDown) 1 else 0) or (if (e.isControlDown) 2 else 0) or (if (e.isMetaDown) 4 else 0) or (if (e.isShiftDown) 8 else 0)
         val code = vk[e.keyCode] ?: e.keyCode
         val name = names[e.keyCode]
         val ch = e.keyChar
         val printable = ch != java.awt.event.KeyEvent.CHAR_UNDEFINED && !ch.isISOControl() && (mods and 2) == 0
+        if (logged < 40) { logged++; app.jam.desktop.shim.Desk.log('D', "Keys", "$type id=${e.id} code=${e.keyCode} char=${ch.code} mods=$mods", null) }
         when (type) {
             KeyEventType.KeyDown -> {
                 val text = when { printable -> ch.toString(); e.keyCode == 10 -> "\r"; else -> null }
                 textSent = printable
-                page.key(if (text != null) "keyDown" else "rawKeyDown", name ?: if (printable) ch.toString() else "", awtCode(e), code, mods, text)
+                // A character goes in as text (as an IME commits it), after its key's own event: it
+                // does not depend on the browser turning the key into a character itself.
+                if (printable) { page.key("rawKeyDown", ch.toString(), awtCode(e), code, mods, null); page.insertText(ch.toString()) }
+                else page.key(if (text != null) "keyDown" else "rawKeyDown", name ?: "", awtCode(e), code, mods, text)
             }
             KeyEventType.KeyUp -> page.key("keyUp", name ?: if (printable) ch.toString() else "", awtCode(e), code, mods, null)
             // The typed character (AWT's KEY_TYPED) when the key press did not carry it: keyboard

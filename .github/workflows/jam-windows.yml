@@ -231,7 +231,7 @@ jobs:
           # sheet, clicked and typed into with the real keyboard path (SendKeys), then Spotify's page.
           Add-Type -Namespace W -Name M -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(int f, int x, int y, int d, int e);'
           function Shot($name) { $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height; [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save("$env:GITHUB_WORKSPACE\out\$name.png") }
-          $env:JAM_DEV_WEB = 'data:text/html,<body style="margin:0"><input style="width:100%;height:100vh;font-size:64px" placeholder="type here">'
+          $env:JAM_DEV_WEB = 'data:text/html,<body style="margin:0;font:28px sans-serif"><input id="i" style="width:100%;height:60vh;font-size:64px" placeholder="type here"><div id="o">keys:</div><script>addEventListener("keydown",e=>o.textContent+=" "+e.key);addEventListener("focus",()=>o.textContent+=" [focus]");addEventListener("blur",()=>o.textContent+=" [blur]")</script>'
           $p = Start-Process -FilePath $app.FullName -PassThru
           Start-Sleep -Seconds 40
           [W.M]::SetCursorPos([int]($b.Width / 2), [int]($b.Height / 2)); [W.M]::mouse_event(2, 0, 0, 0, 0); [W.M]::mouse_event(4, 0, 0, 0, 0)

@@ -236,8 +236,9 @@ class Page(private val view: WebView) {
     fun key(type: String, key: String, code: String, vk: Int, modifiers: Int, text: String?) = run { c ->
         val p = json("type" to type, "key" to key, "code" to code, "windowsVirtualKeyCode" to vk, "nativeVirtualKeyCode" to vk, "modifiers" to modifiers)
         if (text != null) { p.put("text", text); p.put("unmodifiedText", text) }
-        c.fire("Input.dispatchKeyEvent", p)
+        c.call("Input.dispatchKeyEvent", p).whenComplete { _, err -> if (err != null && keyErrors++ < 10) Desk.log('W', "Page", "key event refused: $err", null) }
     }
+    @Volatile private var keyErrors = 0
     fun insertText(text: String) = run { it.fire("Input.insertText", json("text" to text)) }
 
     // ---- events

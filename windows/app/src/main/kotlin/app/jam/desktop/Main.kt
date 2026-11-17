@@ -44,6 +44,8 @@ import kotlinx.coroutines.delay
  * Jam for Windows: Orpheon's Android app (Jam's), running as it does on a phone: its Application
  * (MyspotiApplication) and its one activity (MainActivity), whose views are drawn in this window.
  */
+private var keysSeen = 0
+
 fun main(args: Array<String>) {
     System.setProperty("skiko.renderApi", System.getProperty("skiko.renderApi") ?: if (Desk.isWindows) "DIRECT3D" else "SOFTWARE_FAST")
     Thread.setDefaultUncaughtExceptionHandler { t, e -> Desk.log('E', "Crash", "uncaught on ${t.name}: $e", e) }
@@ -75,6 +77,7 @@ fun main(args: Array<String>) {
             title = now.title?.let { t -> listOfNotNull(t, now.artist).joinToString(" · ") + " — Jam" } ?: "Jam",
             icon = androidx.compose.ui.res.painterResource("jam.png"),
             onPreviewKeyEvent = { e ->
+                if (keysSeen < 12) { keysSeen++; Desk.log('D', "Window", "key ${e.type} ${e.key} owner=${java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner?.javaClass?.simpleName}", null) }
                 // Back, as the phone's: Esc, Alt+Left, the mouse's back button (below).
                 if (e.type == KeyEventType.KeyDown && (e.key == Key.Escape || (e.isAltPressed && e.key == Key.DirectionLeft))) { back(activity.value); true }
                 else false
