@@ -30,6 +30,7 @@ import androidx.compose.ui.unit.DpSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
+import androidx.compose.ui.window.Tray
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
@@ -62,7 +63,11 @@ fun main(args: Array<String>) {
     }
     val activity = mutableStateOf(newActivity(android.content.Intent(android.content.Intent.ACTION_MAIN).apply {
         args.firstOrNull()?.let { data = android.net.Uri.parse(it); action = android.content.Intent.ACTION_VIEW }
-    }) ?: run { Desk.log('I', "Main", "the activity finished at start (YouTube Music mode)", null); quit(); return })
+    }) ?: run {
+        Desk.log('I', "Main", "the activity finished at start (YouTube Music mode)", null)
+        if (YtmCompanion.running) { Single.onLink = { YtmCompanion.front() }; YtmCompanion.run() }
+        quit(); return
+    })
     Intents.onAppIntent = { intent -> Desk.post { activity.value.onNewIntent(intent); Front.request() } }
     Windows.onRecreate = { old -> Desk.post { finish(old); newActivity(old.intent)?.let { activity.value = it } } }
     Windows.onFinish = { a -> if (a === activity.value) Desk.post { quit() } }
@@ -71,8 +76,26 @@ fun main(args: Array<String>) {
     application(exitProcessOnExit = false) {
         val state = rememberWindowState(size = DpSize(1280.dp, 820.dp), position = WindowPosition(Alignment.Center))
         val now by SystemMedia.now
+        // Closing the window keeps Jam playing in the tray (as Jam's other modes do); Quit is there.
+        Tray(
+            state = Front.tray,
+            icon = androidx.compose.ui.res.painterResource("jam.png"),
+            tooltip = now.title?.let { t -> listOfNotNull(t, now.artist).joinToString(" · ") + " — Jam" } ?: "Jam",
+            onAction = { Front.request() },
+            menu = {
+                Item("Open Jam", onClick = { Front.request() })
+                Separator()
+                Item(if (now.playing) "Pause" else "Play", enabled = now.title != null, onClick = { SystemMedia.button(if (now.playing) "pause" else "play") })
+                Item("Next", enabled = now.title != null, onClick = { SystemMedia.button("next") })
+                Item("Previous", enabled = now.title != null, onClick = { SystemMedia.button("previous") })
+                Separator()
+                CheckboxItem("Keep playing when the window is closed", checked = Front.toTray.value, onCheckedChange = { Front.setToTray(it) })
+                Item("Quit Jam", onClick = { quit(); exitApplication() })
+            },
+        )
         Window(
-            onCloseRequest = { quit(); exitApplication() },
+            onCloseRequest = { if (Front.toTray.value) Front.hide() else { quit(); exitApplication() } },
+            visible = Front.shown.value,
             state = state,
             title = now.title?.let { t -> listOfNotNull(t, now.artist).joinToString(" · ") + " — Jam" } ?: "Jam",
             icon = androidx.compose.ui.res.painterResource("jam.png"),
@@ -175,7 +198,23 @@ private fun ToastHost(modifier: Modifier) {
 /** Bringing the window to the front (a link opened while Jam runs, a notification tapped). */
 object Front {
     var window: java.awt.Window? = null
-    fun request() { window?.let { w -> (w as? java.awt.Frame)?.let { if (it.state == java.awt.Frame.ICONIFIED) it.state = java.awt.Frame.NORMAL }; w.toFront(); w.requestFocus() } }
+    /** The window is shown (false: Jam is in the tray). */
+    val shown = mutableStateOf(true)
+    private val prefs by lazy { android.content.Prefs.of("jam_window") }
+    val toTray by lazy { mutableStateOf(prefs.getBoolean("to_tray", true)) }
+    fun setToTray(on: Boolean) { toTray.value = on; prefs.edit().putBoolean("to_tray", on).apply() }
+    fun hide() {
+        shown.value = false
+        if (!hinted && !prefs.getBoolean("tray_hint", false)) { hinted = true; prefs.edit().putBoolean("tray_hint", true).apply(); notify("Jam is still playing", "Jam keeps running in the tray. Right-click its icon to quit.") }
+    }
+    private var hinted = false
+    /** Windows' own notifications (from the tray icon). */
+    val tray = androidx.compose.ui.window.TrayState()
+    fun notify(title: String, text: String?) = tray.sendNotification(androidx.compose.ui.window.Notification(title, text.orEmpty()))
+    fun request() = Desk.post {
+        shown.value = true
+        window?.let { w -> (w as? java.awt.Frame)?.let { if (it.state == java.awt.Frame.ICONIFIED) it.state = java.awt.Frame.NORMAL }; w.toFront(); w.requestFocus() }
+    }
     /** A text field has the keyboard (space types, it does not play/pause). */
     fun typing(): Boolean = java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner?.let { it.javaClass.name.contains("Text") } ?: false
 }

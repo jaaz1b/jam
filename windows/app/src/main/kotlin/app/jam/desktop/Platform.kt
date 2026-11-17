@@ -101,7 +101,7 @@ object Single {
                 server.accept().use { s ->
                     val link = s.getInputStream().bufferedReader().readLine().orEmpty().trim()
                     s.getOutputStream().write(1)
-                    Desk.post { Front.request(); if (link.isNotEmpty()) onLink?.invoke(link) }
+                    Desk.post { if (YtmCompanion.running) YtmCompanion.front() else { Front.request(); if (link.isNotEmpty()) onLink?.invoke(link) } }
                 }
             }
         }, "jam-single").apply { isDaemon = true }.start()

@@ -40,6 +40,12 @@ impl MediaHandle {
         album: Option<&str>,
         cover: Option<&str>,
     ) {
+        crate::companion::update(crate::companion::Update::Metadata {
+            title: title.to_owned(),
+            artist: artist.to_owned(),
+            album: album.map(str::to_owned),
+            cover: cover.map(str::to_owned),
+        });
         let _ = self.tx.send(MediaUpdate::Metadata {
             title: title.to_owned(),
             artist: artist.to_owned(),
@@ -51,15 +57,18 @@ impl MediaHandle {
     /// A search or home card starts playing with no album name; the radio fetched behind it
     /// carries one (#377, the MPRIS side of #309).
     pub fn set_album(&self, album: &str) {
+        crate::companion::update(crate::companion::Update::Album(album.to_owned()));
         let _ = self.tx.send(MediaUpdate::Album(album.to_owned()));
     }
 
     // souvlaki exposes MPRIS Rate as 1.0, so publish listening seconds, like the UI.
     pub fn set_duration(&self, secs: f64, speed: f64) {
+        crate::companion::update(crate::companion::Update::Duration(secs / speed));
         let _ = self.tx.send(MediaUpdate::Duration(secs / speed));
     }
 
     pub fn set_playback(&self, playing: bool, pos: f64, speed: f64) {
+        crate::companion::update(crate::companion::Update::Playback { playing, pos: pos / speed });
         let _ = self.tx.send(MediaUpdate::Playback { playing, pos: pos / speed });
     }
 

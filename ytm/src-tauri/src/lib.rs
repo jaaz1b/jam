@@ -49,6 +49,7 @@ mod webview;
 /// Jam for Android: the bridge to the Android app around the engine (android/mod.rs).
 #[cfg(target_os = "android")]
 mod android;
+mod companion;
 
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
@@ -936,7 +937,7 @@ pub fn run() {
 
             // Discord rich presence — off unless the user opted in; parks on its channel until then.
             // In Jam, Jam itself shows one Discord presence for every source.
-            let discord = if jamhost::active() || cfg!(target_os = "android") {
+            let discord = if jamhost::active() || companion::active() || cfg!(target_os = "android") {
                 None
             } else {
                 discord::spawn(

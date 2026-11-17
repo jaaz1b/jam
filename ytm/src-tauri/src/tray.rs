@@ -72,6 +72,8 @@ pub fn set_main_visible(app: &AppHandle, visible: bool) {
 fn handle_menu(app: &AppHandle, id: &str) {
     match id {
         "show" => show_main(app),
+        "jam_presence" => crate::companion::action("/open-settings"),
+        "jam_spotify" => crate::companion::action("/switch-spotify"),
         "quit" | "restart" => {
             if id == "restart" {
                 // `request_restart`, not `restart`: it goes through RunEvent::Exit, which is
@@ -131,7 +133,7 @@ mod imp {
         }
 
         fn title(&self) -> String {
-            "Limusic".into()
+            "Jam".into()
         }
 
         fn icon_pixmap(&self) -> Vec<Icon> {
@@ -167,7 +169,7 @@ mod imp {
                 })
             };
             vec![
-                item("Show Limusic", "show"),
+                item("Show Jam", "show"),
                 MenuItem::Separator,
                 item(if self.playing { "Pause" } else { "Play" }, "play_pause"),
                 item("Next", "next"),
@@ -241,32 +243,35 @@ mod imp {
     }
 
     pub fn init(app: &AppHandle) -> tauri::Result<()> {
-        let show = MenuItem::with_id(app, "show", "Show Limusic", true, None::<&str>)?;
+        let show = MenuItem::with_id(app, "show", "Show Jam", true, None::<&str>)?;
+        // Jam for Windows runs behind this app (companion.rs): its Discord presence settings and
+        // the way back to Spotify mode.
+        let jam_presence = MenuItem::with_id(app, "jam_presence", "Discord presence…", true, None::<&str>)?;
+        let jam_spotify = MenuItem::with_id(app, "jam_spotify", "Switch to Spotify mode", true, None::<&str>)?;
         let play_pause = MenuItem::with_id(app, "play_pause", "Play", true, None::<&str>)?;
         let next = MenuItem::with_id(app, "next", "Next", true, None::<&str>)?;
         let prev = MenuItem::with_id(app, "prev", "Previous", true, None::<&str>)?;
         let restart = MenuItem::with_id(app, "restart", "Restart", true, None::<&str>)?;
         let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-        let menu = Menu::with_items(
-            app,
-            &[
-                &show,
-                &PredefinedMenuItem::separator(app)?,
-                &play_pause,
-                &next,
-                &prev,
-                &PredefinedMenuItem::separator(app)?,
-                &restart,
-                &quit,
-            ],
-        )?;
+        let sep1 = PredefinedMenuItem::separator(app)?;
+        let sep2 = PredefinedMenuItem::separator(app)?;
+        let sep3 = PredefinedMenuItem::separator(app)?;
+        let mut items: Vec<&dyn tauri::menu::IsMenuItem<Wry>> = vec![&show, &sep1, &play_pause, &next, &prev, &sep2];
+        if crate::companion::active() {
+            items.push(&jam_presence);
+            items.push(&jam_spotify);
+            items.push(&sep3);
+        }
+        items.push(&restart);
+        items.push(&quit);
+        let menu = Menu::with_items(app, &items)?;
 
         // Menu on right-click only, so a left double-click can't also pop it open behind the
         // window it just restored.
         let mut builder = TrayIconBuilder::with_id("main")
             .menu(&menu)
             .show_menu_on_left_click(false)
-            .tooltip("Limusic")
+            .tooltip("Jam")
             .on_menu_event(|app, event| handle_menu(app, event.id.as_ref()))
             .on_tray_icon_event(|tray, event| {
                 if let TrayIconEvent::DoubleClick { button: MouseButton::Left, .. } = event {

@@ -256,6 +256,16 @@ class Page(private val view: WebView) {
 
     // ---- events
     private fun client() = view.getWebViewClient()
+
+    /** An address of an app's own scheme the page opens (once): to the client, as a link to follow. */
+    private var lastAppLink: String? = null
+    private fun appLink(u: String) {
+        val scheme = u.substringBefore(':').lowercase()
+        if (u.isEmpty() || scheme in setOf("http", "https", "about", "data", "blob", "javascript", "file", "chrome", "edge", "devtools")) return
+        synchronized(this) { if (u == lastAppLink) return; lastAppLink = u }
+        Desk.log('I', "Page", "app link: $scheme:…", null)
+        Desk.post { client()?.shouldOverrideUrlLoading(view, DesktopRequest(u, "GET", emptyMap(), true)) }
+    }
     private fun chrome() = view.getWebChromeClient()
 
     private fun event(method: String, p: JSONObject) {
@@ -281,7 +291,19 @@ class Page(private val view: WebView) {
                 if (p.optBoolean("canceled") && !req.isForMainFrame) return
                 Desk.post { client()?.onReceivedError(view, req, android.webkit.WebResourceError.of(errorCode(text), text)) }
             }
-            "Network.loadingFinished" -> requests.remove(p.getString("requestId"))
+            "Network.loadingFinished" -> {
+                val id = p.getString("requestId")
+                val req = requests.remove(id) ?: return
+                // An OAuth "Authorize" answers with the app's own address (jamdiscord://…), which the
+                // page then opens: a browser would hand it to the app; here nothing would (Discord's
+                // sign-in stayed on "Authorizing"). The answer itself is read, and the app gets it.
+                if (req.method == "POST" && "/oauth2/authorize" in req.url.toString()) {
+                    cdp?.call("Network.getResponseBody", json("requestId" to id))?.thenAccept { r ->
+                        val body = r.optString("body")
+                        Regex("\"location\"\\s*:\\s*\"([a-zA-Z][a-zA-Z0-9+.-]*:[^\"]+)\"").find(body)?.groupValues?.get(1)?.replace("\\/", "/")?.let { loc -> appLink(loc) }
+                    }
+                }
+            }
             "Page.frameNavigated" -> {
                 val f = p.getJSONObject("frame")
                 if (f.has("parentId")) return
@@ -300,13 +322,7 @@ class Page(private val view: WebView) {
                 cdp?.call("Runtime.evaluate", json("expression" to "document.title", "returnByValue" to true))?.thenAccept { r -> title = r.optJSONObject("result")?.optString("value"); Desk.post { chrome()?.onReceivedTitle(view, title) } }
                 Desk.post { chrome()?.onProgressChanged(view, 100); client()?.onPageFinished(view, u) }
             }
-            "Page.frameRequestedNavigation" -> if (p.optString("frameId") == mainFrame) {
-                val u = p.optString("url")
-                val scheme = u.substringBefore(':').lowercase()
-                if (scheme !in setOf("http", "https", "about", "data", "blob", "javascript", "file")) {
-                    Desk.post { client()?.shouldOverrideUrlLoading(view, DesktopRequest(u, "GET", emptyMap(), true)) }
-                }
-            }
+            "Page.frameRequestedNavigation" -> appLink(p.optString("url"))
             "Page.windowOpen" -> { val u = p.optString("url"); if (u.isNotEmpty()) load(u, null) }
             "Page.javascriptDialogOpening" -> cdp?.fire("Page.handleJavaScriptDialog", json("accept" to true))
             "Page.screencastFrame" -> {

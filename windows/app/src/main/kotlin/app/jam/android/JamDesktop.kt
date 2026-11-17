@@ -21,16 +21,15 @@ object JamMode {
     fun openYtmInstead(activity: Activity): Boolean {
         if (!ytm(activity)) return false
         val exe = ytmExe() ?: run { Desk.log('W', "JamMode", "YouTube Music mode, but jam-ytm.exe is not there: Spotify mode", null); return false }
-        runCatching { ProcessBuilder(exe.absolutePath).directory(exe.parentFile).start() }.onFailure { return false }
-        return true
+        return app.jam.desktop.YtmCompanion.start(exe)
     }
 
     /** Saves the mode and restarts in it: the YouTube Music app, or Jam itself. */
     fun switchTo(activity: Activity, ytm: Boolean) {
         activity.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putBoolean(KEY_YTM, ytm).commit()
-        if (ytm) {
-            if (openYtmInstead(activity)) { app.jam.desktop.shim.ServiceHost.stopAll(); Runtime.getRuntime().exit(0) }
-        } else app.jam.desktop.Restart.now()
+        if (ytm && ytmExe() == null) return
+        if (!ytm) app.jam.desktop.YtmCompanion.stopYtm()
+        app.jam.desktop.Restart.now()
     }
 
     fun applyEntryPoints(context: Context) {}

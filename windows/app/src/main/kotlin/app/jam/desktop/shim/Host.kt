@@ -61,7 +61,12 @@ object ServiceHost {
 object Notices {
     @Volatile var onNotice: ((tag: String?, id: Int, n: android.app.Notification) -> Unit)? = null
     fun notify(tag: String?, id: Int, n: android.app.Notification) {
-        onNotice?.invoke(tag, id, n) ?: run { if (!n.ongoing && n.title != null) Toasts.show(listOfNotNull(n.title, n.text).joinToString(" · "), true) }
+        onNotice?.invoke(tag, id, n) ?: run {
+            if (n.ongoing || n.title == null) return@run
+            // In the window: Jam's own toast. In the tray: a Windows notification.
+            if (app.jam.desktop.Front.shown.value) Toasts.show(listOfNotNull(n.title, n.text).joinToString(" · "), true)
+            else app.jam.desktop.Front.notify(n.title.toString(), n.text?.toString())
+        }
     }
     fun cancel(tag: String?, id: Int) {}
 }
