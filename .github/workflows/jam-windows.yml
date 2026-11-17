@@ -208,6 +208,7 @@ jobs:
 
       # First start on the runner: the window (Edge starts hidden behind it), then its log.
       - name: Try it
+        continue-on-error: true
         shell: pwsh
         run: |
           $app = Get-ChildItem -Recurse windows/app/build/compose/binaries -Filter Jam.exe | Where-Object { $_.FullName -match '\\app\\' } | Select-Object -First 1
@@ -224,6 +225,32 @@ jobs:
           Get-Content "$env:LOCALAPPDATA\Jam\App\jam.log" -Tail 80 -ErrorAction SilentlyContinue | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+
+          # Typing into a web view (Spotify's sign-in): a page with one big text field in the web
+          # sheet, clicked and typed into with the real keyboard path (SendKeys), then Spotify's page.
+          Add-Type -Namespace W -Name M -MemberDefinition '[DllImport("user32.dll")] public static extern bool SetCursorPos(int x, int y); [DllImport("user32.dll")] public static extern void mouse_event(int f, int x, int y, int d, int e);'
+          function Shot($name) { $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height; [System.Drawing.Graphics]::FromImage($bmp).CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size); $bmp.Save("$env:GITHUB_WORKSPACE\out\$name.png") }
+          $env:JAM_DEV_WEB = 'data:text/html,<body style="margin:0"><input style="width:100%;height:100vh;font-size:64px" placeholder="type here">'
+          $p = Start-Process -FilePath $app.FullName -PassThru
+          Start-Sleep -Seconds 40
+          [W.M]::SetCursorPos([int]($b.Width / 2), [int]($b.Height / 2)); [W.M]::mouse_event(2, 0, 0, 0, 0); [W.M]::mouse_event(4, 0, 0, 0, 0)
+          Start-Sleep -Seconds 2
+          [System.Windows.Forms.SendKeys]::SendWait("Hello Jam 123")
+          Start-Sleep -Seconds 3
+          Shot "typing"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          Start-Sleep -Seconds 3
+          $env:JAM_DEV_WEB = 'https://accounts.spotify.com/en/login'
+          $p = Start-Process -FilePath $app.FullName -PassThru
+          Start-Sleep -Seconds 45
+          Shot "spotify-sign-in"
+          "---- typing runs" | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+          Get-Content "$env:LOCALAPPDATA\Jam\App\jam.log" -Tail 40 -ErrorAction SilentlyContinue | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          $env:JAM_DEV_WEB = ''
 
       - name: Release
         shell: bash

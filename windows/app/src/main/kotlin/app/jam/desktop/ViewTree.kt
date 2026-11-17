@@ -129,6 +129,7 @@ object Keys {
         36 to "Home", 35 to "End", 33 to "PageUp", 34 to "PageDown", 16 to "Shift", 17 to "Control", 18 to "Alt",
     )
     private val vk = mapOf(10 to 13, 127 to 46)
+    @Volatile private var textSent = false
     fun send(page: app.jam.desktop.web.Page, type: KeyEventType, e: java.awt.event.KeyEvent) {
         val mods = (if (e.isAltDown) 1 else 0) or (if (e.isControlDown) 2 else 0) or (if (e.isMetaDown) 4 else 0) or (if (e.isShiftDown) 8 else 0)
         val code = vk[e.keyCode] ?: e.keyCode
@@ -138,9 +139,14 @@ object Keys {
         when (type) {
             KeyEventType.KeyDown -> {
                 val text = when { printable -> ch.toString(); e.keyCode == 10 -> "\r"; else -> null }
+                textSent = printable
                 page.key(if (text != null) "keyDown" else "rawKeyDown", name ?: if (printable) ch.toString() else "", awtCode(e), code, mods, text)
             }
             KeyEventType.KeyUp -> page.key("keyUp", name ?: if (printable) ch.toString() else "", awtCode(e), code, mods, null)
+            // The typed character (AWT's KEY_TYPED) when the key press did not carry it: keyboard
+            // layouts and dead keys (é, ñ) on Windows give the character only there.
+            else -> if (e.id == java.awt.event.KeyEvent.KEY_TYPED && !textSent && ch != java.awt.event.KeyEvent.CHAR_UNDEFINED && !ch.isISOControl() && (mods and 2) == 0) page.insertText(ch.toString())
+                else if (e.id == java.awt.event.KeyEvent.KEY_TYPED) textSent = false
         }
     }
     private fun awtCode(e: java.awt.event.KeyEvent): String = when (e.keyCode) {

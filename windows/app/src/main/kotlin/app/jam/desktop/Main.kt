@@ -49,6 +49,8 @@ fun main(args: Array<String>) {
     Thread.setDefaultUncaughtExceptionHandler { t, e -> Desk.log('E', "Crash", "uncaught on ${t.name}: $e", e) }
     Single.claim(args) // a second start hands its link to this one and quits
     app.jam.desktop.security.AndroidKeyStore.install()
+    // Tests (CI): a page in the web sheet over the app, to try typing into a web view.
+    System.getenv("JAM_DEV_WEB")?.takeIf { it.isNotBlank() }?.let { url -> Desk.timer.schedule({ WebSheet.open(url) }, 12, java.util.concurrent.TimeUnit.SECONDS) }
     // The hidden browser starts at once (it takes a second or two), while the app is made.
     Thread({ runCatching { app.jam.desktop.web.Edge.of() }.onFailure { Desk.log('E', "Edge", "start: $it", it) } }, "edge-start").apply { isDaemon = true }.start()
     javax.swing.SwingUtilities.invokeAndWait {
