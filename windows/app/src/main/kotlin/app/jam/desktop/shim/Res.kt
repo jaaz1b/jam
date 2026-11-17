@@ -15,14 +15,14 @@ object Res {
     /** id → (type, name), from rnames.txt. */
     private val byId: Map<Int, Pair<String, String>> by lazy {
         val m = HashMap<Int, Pair<String, String>>()
-        loader.getResourceAsStream("rnames.txt")?.bufferedReader()?.forEachLine { line ->
+        loader.getResourceAsStream("res/rnames.txt")?.bufferedReader()?.forEachLine { line ->
             val p = line.split(' ')
             if (p.size == 3) m[p[2].toInt()] = p[0] to p[1]
         }
         m
     }
     private val byName: Map<String, Int> by lazy { byId.entries.associate { (id, tn) -> "${tn.first}/${tn.second}" to id } }
-    val files: List<String> by lazy { loader.getResourceAsStream("resfiles.txt")?.bufferedReader()?.readLines().orEmpty() }
+    val files: List<String> by lazy { loader.getResourceAsStream("res/resfiles.txt")?.bufferedReader()?.readLines().orEmpty() }
 
     fun name(id: Int): Pair<String, String>? = byId[id]
     fun id(type: String, name: String): Int = byName["$type/$name"] ?: 0

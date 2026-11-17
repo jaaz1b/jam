@@ -50,7 +50,7 @@ val androidSources by tasks.registering(Sync::class) {
     into(layout.buildDirectory.dir("generated/android-src"))
     val rules = patches.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.map { it.split(Regex(" =>(?: |$)")) }
     eachFile {
-        val mine = rules.filter { r -> r[0] == path }
+        val mine = rules.filter { r -> r[0] == path || r[0] == "*" }
         if (mine.isNotEmpty()) filter { line -> mine.fold(line) { l, r -> l.replace(Regex(r[1]), r.getOrElse(2) { "" }.replace("\\n", "\n")) } }
     }
 }
@@ -165,7 +165,7 @@ compose.desktop {
             copyright = "GPL-3.0. Built on Orpheon (formerly Myspoti, github.com/kota-zo/myspoti) by kota-zo."
             licenseFile.set(rootProject.file("../LICENSE"))
             appResourcesRootDir.set(project.layout.projectDirectory.dir("app-resources"))
-            modules("java.net.http", "jdk.crypto.ec", "java.naming", "jdk.unsupported", "java.management", "java.sql", "java.desktop", "jdk.accessibility")
+            includeAllModules = true
             windows {
                 iconFile.set(project.file("jam.ico"))
                 menu = true
@@ -190,4 +190,11 @@ tasks.register<JavaExec>("shots") {
 tasks.register("resolveAll") {
     notCompatibleWithConfigurationCache("resolves configurations at execution")
     doLast { listOf("compileClasspath", "runtimeClasspath").forEach { project.configurations.getByName(it).resolve() } }
+}
+
+/** Development aid: the run classpath, for starting the app by hand (tests on Linux). */
+tasks.register("printClasspath") {
+    notCompatibleWithConfigurationCache("reads configurations")
+    dependsOn("classes")
+    doLast { println("CP=" + (sourceSets.main.get().runtimeClasspath).asPath) }
 }

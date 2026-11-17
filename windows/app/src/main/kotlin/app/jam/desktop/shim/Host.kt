@@ -12,7 +12,21 @@ object Windows {
     @Volatile var onFinish: ((android.app.Activity) -> Unit)? = null
     @Volatile var onMinimize: (() -> Unit)? = null
     @Volatile var onRecreate: ((android.app.Activity) -> Unit)? = null
-    fun finish(a: android.app.Activity) { onFinish?.invoke(a) }
+    /** Activities other than the main one (Jam's settings page...), shown over it, the last on top. */
+    val stack = androidx.compose.runtime.mutableStateListOf<android.app.Activity>()
+    fun openActivity(intent: android.content.Intent) = Desk.post {
+        val a = runCatching { Class.forName(intent.component!!.className).getDeclaredConstructor().newInstance() as android.app.Activity }.getOrElse { Desk.log('E', "Windows", "activity: $it", it); return@post }
+        a.intent = intent
+        a.onCreate(null)
+        if (a.isFinishing) return@post
+        a.content.value?.attachAsRoot(true)
+        a.onStart(); a.onResume()
+        stack += a
+    }
+    fun finish(a: android.app.Activity) {
+        if (stack.remove(a)) { runCatching { a.onPause(); a.onStop(); a.content.value?.attachAsRoot(false); a.onDestroy() }; return }
+        onFinish?.invoke(a)
+    }
     fun minimize(a: android.app.Activity) { onMinimize?.invoke() }
     fun recreate(a: android.app.Activity) { onRecreate?.invoke(a) }
     fun flagsChanged(a: android.app.Activity) { keepAwake.value = a.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON != 0 }

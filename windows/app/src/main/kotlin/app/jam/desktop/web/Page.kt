@@ -92,6 +92,7 @@ class Page(private val view: WebView) {
         userAgent?.let { applyUa(c, it) }
         mainFrame = runCatching { c.callSync("Page.getFrameTree").getJSONObject("frameTree").getJSONObject("frame").getString("id") }.getOrNull()
         synchronized(docScripts) { for ((h, src) in docScripts) addDocScript(c, h, src) }
+        c.fire("Page.addScriptToEvaluateOnNewDocument", json("source" to SELECT_LISTS))
         Pages.register(id, this)
         synchronized(waiting) {
             if (destroyed) { c.close(); edge.closeTarget(id); return }
@@ -368,7 +369,26 @@ class Page(private val view: WebView) {
         "INTERNET_DISCONNECTED" in text -> -6; "ABORTED" in text -> -1; else -> -1
     }
 
-    companion object { const val BINDING = "__jamPost" }
+    companion object {
+        const val BINDING = "__jamPost"
+        /**
+         * A page's drop-down lists (<select>) open as the browser's own popup window, which is not part
+         * of the page's picture: they open in the page instead, as a list under the field.
+         */
+        val SELECT_LISTS = """(function(){if(window.__jamSelect)return;window.__jamSelect=1;
+function close(){var o=document.getElementById('__jam_sel');if(o)o.remove();}
+document.addEventListener('mousedown',function(e){var s=e.target&&e.target.closest&&e.target.closest('select');
+if(!s||s.multiple||s.disabled){if(!(e.target.closest&&e.target.closest('#__jam_sel')))close();return;}
+e.preventDefault();e.stopPropagation();if(document.getElementById('__jam_sel')){close();return;}s.focus();
+var r=s.getBoundingClientRect(),cs=getComputedStyle(s),o=document.createElement('div');o.id='__jam_sel';
+o.style.cssText='position:fixed;z-index:2147483647;left:'+r.left+'px;top:'+(r.bottom+4)+'px;min-width:'+r.width+'px;max-height:'+Math.max(160,innerHeight-r.bottom-16)+'px;overflow:auto;background:#1e1e24;color:#fff;border:1px solid #3a3a44;border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.5);font:'+cs.font+';padding:4px';
+Array.prototype.forEach.call(s.options,function(op,i){if(op.hidden)return;var d=document.createElement('div');d.textContent=op.text;
+d.style.cssText='padding:8px 12px;border-radius:7px;cursor:pointer;white-space:nowrap;'+(op.disabled?'opacity:.4;':'')+(i==s.selectedIndex?'background:#8b5cf6;color:#000;':'');
+d.onmouseenter=function(){if(i!=s.selectedIndex)d.style.background='#2c2c34';};d.onmouseleave=function(){if(i!=s.selectedIndex)d.style.background='';};
+d.onmousedown=function(ev){ev.preventDefault();ev.stopPropagation();if(op.disabled)return;s.selectedIndex=i;s.dispatchEvent(new Event('input',{bubbles:true}));s.dispatchEvent(new Event('change',{bubbles:true}));close();};o.appendChild(d);});
+document.documentElement.appendChild(o);},true);
+addEventListener('scroll',function(e){if(!(e.target&&e.target.id=='__jam_sel'))close();},true);addEventListener('blur',close);})();"""
+    }
 }
 
 /** A request as WebViewClient sees it. */

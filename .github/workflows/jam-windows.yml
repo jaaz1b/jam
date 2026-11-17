@@ -1,10 +1,10 @@
-# Jam for Windows: the Jam app for the PC, like Jam for Android. A Compose window in Jam's look over
-# Orpheon's Spotify API, which plays through the Spotify Web Player in a hidden Microsoft Edge
-# (android/base/desktop), plus YouTube Music mode: Jam's YouTube Music engine (ytm/, jam-ytm.exe),
-# built here and shipped inside the app. Not the Electron app (desktop/, windows.yml).
+# Jam for Windows: Orpheon's Android app (Jam for Android's Spotify side) running on the PC, its own UI
+# and both looks, extensions and all (windows/: the app's sources compiled over a PC version of the
+# Android APIs). Spotify plays in the Spotify Web Player inside a hidden Microsoft Edge; local and
+# extension audio through ffmpeg. YouTube Music mode is Jam's YouTube Music app (ytm/, jam-ytm.exe),
+# built here and shipped inside.
 #
-# Publishes a pre-release jam-windows-v1.0.<run> with Jam-<version>.msi and .exe, and a screenshot
-# of the app's first start on the runner.
+# Publishes a pre-release jam-windows-v2.0.<run> with the installers and a screenshot of the first start.
 
 name: Jam for Windows
 
@@ -12,15 +12,21 @@ on:
   push:
     branches: [main, jam-windows]
     paths:
-      - 'android/base/desktop/**'
-      - 'android/base/host-cdp/**'
-      - 'android/base/api/**'
-      - 'android/base/api-spotify/**'
-      - 'android/base/api-web/**'
+      - 'windows/**'
+      - 'android/base/app/src/main/**'
+      - 'android/base/host-android/src/main/**'
+      - 'android/base/api*/**'
       - 'android/base/engine/**'
+      - 'android/base/extensions/**'
+      - 'android/base/catalog/**'
+      - 'android/base/automix/**'
+      - 'android/base/pass/**'
+      - 'android/base/host-cdp/**'
       - 'android/base/gradle/**'
       - 'ytm/src/**'
       - 'ytm/src-tauri/src/**'
+      - 'ytm/src-tauri/gen/android/app/src/main/java/app/jam/android/**'
+      - 'ytm/src-tauri/gen/android/app/src/main/assets/**'
       - 'ytm/ui/src/**'
       - '.github/workflows/jam-windows.yml'
   workflow_dispatch:
@@ -145,13 +151,25 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          D=android/base/desktop/app-resources/windows/jam-ytm
+          D=windows/app/app-resources/windows/jam-ytm
           mkdir -p "$D"
           cp ytm/target/release/jam-ytm.exe ytm/src-tauri/libmpv-2.dll "$D"/
           cp LICENSE "$D"/LICENSE.txt
           ls -la "$D"
 
-      # ---------------------------------------------------------------- The Jam app (android/base/desktop)
+      # The decoder for local files, downloads and extension streams (LGPL build of FFmpeg).
+      - name: FFmpeg
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL -o /tmp/ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-lgpl.zip
+          mkdir -p /tmp/ff && unzip -q /tmp/ffmpeg.zip -d /tmp/ff
+          D=windows/app/app-resources/windows
+          cp /tmp/ff/*/bin/ffmpeg.exe "$D"/ffmpeg.exe
+          mkdir -p "$D"/licenses && cp /tmp/ff/*/LICENSE.txt "$D"/licenses/FFmpeg-LICENSE.txt
+          "$D"/ffmpeg.exe -hide_banner -version | head -1
+
+      # ---------------------------------------------------------------- The Jam app (windows/)
 
       - uses: actions/setup-java@v4
         with:
@@ -163,23 +181,23 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION="1.0.${GITHUB_RUN_NUMBER}"
-          cd android/base
-          ./gradlew :desktop:packageMsi :desktop:packageExe :desktop:createDistributable --stacktrace -PjamWinVersion="$VERSION"
-          mkdir -p ../../out
-          find desktop/build/compose/binaries -name "*.msi" -exec cp {} "../../out/Jam-${VERSION}.msi" \;
-          find desktop/build/compose/binaries -name "*.exe" -path "*exe*" -not -path "*/app/*" -exec cp {} "../../out/Jam-${VERSION}-setup.exe" \;
-          ls -la ../../out
+          VERSION="2.0.${GITHUB_RUN_NUMBER}"
+          cd windows
+          ./gradlew --no-configuration-cache :app:packageMsi :app:packageExe :app:createDistributable --stacktrace -PjamWinVersion="$VERSION"
+          mkdir -p ../out
+          find app/build/compose/binaries -name "*.msi" -exec cp {} "../out/Jam-${VERSION}.msi" \;
+          find app/build/compose/binaries -name "*.exe" -path "*/exe/*" -exec cp {} "../out/Jam-${VERSION}-setup.exe" \;
+          ls -la ../out
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
-      # First start on the runner (signed out): the window, and the hidden Edge it starts.
+      # First start on the runner: the window (Edge starts hidden behind it), then its log.
       - name: Try it
         shell: pwsh
         run: |
-          $app = Get-ChildItem -Recurse android/base/desktop/build/compose/binaries -Filter Jam.exe | Where-Object { $_.FullName -match '\\app\\' } | Select-Object -First 1
+          $app = Get-ChildItem -Recurse windows/app/build/compose/binaries -Filter Jam.exe | Where-Object { $_.FullName -match '\\app\\' } | Select-Object -First 1
           if (-not $app) { throw "Jam.exe not found" }
           $p = Start-Process -FilePath $app.FullName -PassThru
-          Start-Sleep -Seconds 45
+          Start-Sleep -Seconds 50
           Add-Type -AssemblyName System.Windows.Forms,System.Drawing
           $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
           $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
@@ -187,7 +205,7 @@ jobs:
           $bmp.Save("$env:GITHUB_WORKSPACE\out\first-start.png")
           "Jam running: $(-not $p.HasExited)" | Tee-Object "$env:GITHUB_WORKSPACE\out\first-start.txt"
           Get-Process msedge -ErrorAction SilentlyContinue | Measure-Object | ForEach-Object { "Edge processes: $($_.Count)" } | Tee-Object -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
-          Get-Content "$env:LOCALAPPDATA\Jam\App\browser.log" -Tail 20 -ErrorAction SilentlyContinue | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+          Get-Content "$env:LOCALAPPDATA\Jam\App\jam.log" -Tail 80 -ErrorAction SilentlyContinue | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
 
@@ -199,4 +217,4 @@ jobs:
         run: |
           gh release create "jam-windows-v${VERSION}" out/* -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --prerelease \
             --title "Jam for Windows ${VERSION}" \
-            --notes "Jam for Windows, like Jam for Android: Spotify through a hidden Microsoft Edge (Orpheon's engine), YouTube Music mode (Settings), Discord status. Install with Jam-${VERSION}.msi (or the -setup.exe). Needs Microsoft Edge or Google Chrome (every Windows 10/11 PC has Edge). first-start.png is the app on the build machine."
+            --notes "Jam for Windows: the Android app on the PC (Orpheon's UI, Classic and Immersive looks, extensions, downloads, Discord status). Spotify plays in a hidden Microsoft Edge, never seen. YouTube Music mode: Settings. Install with Jam-${VERSION}.msi (or the -setup.exe). first-start.png is the app on the build machine."

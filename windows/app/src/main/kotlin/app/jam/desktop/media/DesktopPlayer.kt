@@ -72,6 +72,7 @@ class DesktopPlayer(
     private val commands = LinkedBlockingQueue<() -> Unit>()
     private var current: Run? = null
     private var preloaded: Run? = null
+    private var sinkFailed = false
     private val thread = Thread(::loop, "jam-player-$sessionId").apply { isDaemon = true; start() }
 
     init {
@@ -88,6 +89,7 @@ class DesktopPlayer(
         @Volatile var eof = false
         @Volatile var frames = 0L
         @Volatile var stopped = false
+        var described = false
         init {
             val ds = (source as? DesktopMediaSource)?.data ?: (sourceFactory as? androidx.media3.exoplayer.source.DefaultMediaSourceFactory)?.dataSourceFactory()
                 ?: androidx.media3.datasource.DefaultDataSource.Factory(context)
@@ -138,10 +140,11 @@ class DesktopPlayer(
             val chunk = r.chunks.poll(20, TimeUnit.MILLISECONDS)
             if (chunk == null) { if (state == Player.STATE_READY && !r.eof) setState(Player.STATE_BUFFERING); continue }
             if (chunk.isEmpty()) { ended(r); continue }
-            if (state != Player.STATE_READY) { setState(Player.STATE_READY); describe(r) }
+            if (state != Player.STATE_READY) setState(Player.STATE_READY)
+            if (!r.described && (r.decode.durationMs > 0 || r.frames > Ffmpeg.RATE)) { r.described = true; describe(r) }
             val pts = (r.startMs + r.frames * 1000 / Ffmpeg.RATE) * 1000
             r.frames += chunk.size / 4
-            runCatching { sink.handleBuffer(ByteBuffer.wrap(chunk).order(ByteOrder.LITTLE_ENDIAN), pts, 1) }
+            runCatching { sink.handleBuffer(ByteBuffer.wrap(chunk).order(ByteOrder.LITTLE_ENDIAN), pts, 1) }.onFailure { if (!sinkFailed) { sinkFailed = true; Desk.log('E', "Player", "sink: $it", it) } }
             maybePreload(r)
         }
         current?.stop(); preloaded?.stop()

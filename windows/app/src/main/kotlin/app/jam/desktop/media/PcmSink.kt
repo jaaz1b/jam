@@ -20,7 +20,7 @@ import javax.sound.sampled.SourceDataLine
  */
 class PcmSink(private val processors: Array<AudioProcessor>, private val bufferUs: Int) : AudioSink {
     private var listener: AudioSink.Listener? = null
-    private var line: SourceDataLine? = null
+    private var line: Out? = null
     private var outFormat = AudioProcessor.AudioFormat(Ffmpeg.RATE, 2, C.ENCODING_PCM_16BIT)
     private var active = emptyList<AudioProcessor>()
     private val stretch = Stretch()
@@ -58,10 +58,8 @@ class PcmSink(private val processors: Array<AudioProcessor>, private val bufferU
 
     private fun openLine(fmt: AudioProcessor.AudioFormat) {
         line?.let { runCatching { it.stop(); it.close() } }
-        val af = AudioFormat(fmt.sampleRate.toFloat(), 16, fmt.channelCount, true, false)
-        val l = AudioSystem.getSourceDataLine(af)
         val bytes = (fmt.sampleRate.toLong() * fmt.channelCount * 2 * bufferUs.coerceAtLeast(100_000) / 1_000_000).toInt()
-        l.open(af, bytes - bytes % (fmt.channelCount * 2))
+        val l = Out.open(fmt.sampleRate, fmt.channelCount, bytes)
         line = l; lineBase = l.longFramePosition; written = 0; marks.clear()
         if (playing) l.start()
     }
@@ -84,8 +82,8 @@ class PcmSink(private val processors: Array<AudioProcessor>, private val bufferU
             while (data.hasRemaining()) { p.queueInput(data); out += copyOf(p.output) }
             data = join(out)
         }
-        if (buffer.hasRemaining()) buffer.position(buffer.limit())
         write(data, endUs)
+        if (buffer.hasRemaining()) buffer.position(buffer.limit())
         return true
     }
 

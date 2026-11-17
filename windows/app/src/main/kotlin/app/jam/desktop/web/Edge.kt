@@ -118,6 +118,8 @@ class Edge private constructor(val profile: String, private val process: Process
                 "--user-data-dir=${dir.absolutePath}",
                 "--no-first-run", "--no-default-browser-check", "--disable-sync", "--disable-extensions",
                 "--autoplay-policy=no-user-gesture-required",
+                // Scrollbars over the content, as on a phone (the app's pages are made for one).
+                "--enable-features=OverlayScrollbar",
                 // Out of sight is not paused: no throttling of the hidden windows' pages and timers.
                 "--disable-background-timer-throttling", "--disable-backgrounding-occluded-windows", "--disable-renderer-backgrounding",
                 "--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,msEdgeSidebarV2,msHubApps,EdgeCollections,msUndersideButton,msShowFirstRunPage,Translate,msEdgeShopping,msImplicitSignin",

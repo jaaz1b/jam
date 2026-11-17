@@ -10,3 +10,7 @@ com/music/spotui/ui/navigation/MyNavHost.kt => ^package com.music.spotui.ui.navi
 com/music/spotui/ui/screens/PlayerScreen.kt => androidx.compose.ui.text.PlatformTextStyle\(includeFontPadding = false\) => null
 com/music/spotui/ui/screens/PlayerScreen.kt => androidx.compose.ui.platform.LocalLifecycleOwner => androidx.lifecycle.compose.LocalLifecycleOwner
 com/music/spotui/ui/tv/TvExtensions.kt => ^package com.music.spotui.ui.tv$ => package com.music.spotui.ui.tv\nimport app.jam.desktop.compat.getString
+# ViewModels: on the PC, navigation's back stack entries have no reflective factory (Android's
+# SavedStateViewModelFactory); viewModel() is given one (app.jam.desktop.compat.viewModel). Any file.
+* => ^import androidx\.lifecycle\.viewmodel\.compose\.viewModel$ => import app.jam.desktop.compat.viewModel
+* => androidx\.lifecycle\.viewmodel\.compose\.viewModel\( => app.jam.desktop.compat.viewModel(

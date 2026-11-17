@@ -74,19 +74,24 @@ fun main(args: Array<String>) {
             icon = androidx.compose.ui.res.painterResource("jam.png"),
             onPreviewKeyEvent = { e ->
                 // Back, as the phone's: Esc, Alt+Left, the mouse's back button (below).
-                if (e.type == KeyEventType.KeyDown && (e.key == Key.Escape || (e.isAltPressed && e.key == Key.DirectionLeft))) { activity.value.onBackPressedDispatcher.onBackPressed(); true }
-                else if (e.type == KeyEventType.KeyDown && e.key == Key.Spacebar && !Front.typing()) { SystemMedia.key(0xB3); true }
+                if (e.type == KeyEventType.KeyDown && (e.key == Key.Escape || (e.isAltPressed && e.key == Key.DirectionLeft))) { back(activity.value); true }
                 else false
             },
         ) {
             LaunchedEffect(Unit) { Front.window = window; DarkTitleBar.apply(window); window.minimumSize = java.awt.Dimension(420, 640) }
             ActivityWindow(activity.value, Modifier.onPointerEvent(PointerEventType.Press) { e ->
                 val b = (e.nativeEvent as? java.awt.event.MouseEvent)?.button
-                if (b == 4) activity.value.onBackPressedDispatcher.onBackPressed()
+                if (b == 4) back(activity.value)
             })
         }
     }
     quit()
+}
+
+/** Back: the activity on top hears it (it finishes when nothing in it takes it). */
+private fun back(main: android.app.Activity) {
+    val top = Windows.stack.lastOrNull()
+    if (top != null) { if (!top.onBackPressedDispatcher.dispatch()) top.finish() } else main.onBackPressedDispatcher.onBackPressed()
 }
 
 private fun newActivity(intent: android.content.Intent): android.app.Activity? {
@@ -131,9 +136,23 @@ fun ActivityWindow(a: android.app.Activity, modifier: Modifier) {
     ) {
         Box(modifier.fillMaxSize().background(Color(0xFF0A0A0C))) {
             root?.let { ViewNode(it) }
+            for (top in Windows.stack.toList()) ActivityLayer(top)
             WebSheet.Host()
             ToastHost(Modifier.align(Alignment.BottomCenter))
         }
+    }
+}
+
+/** Another activity over the main one: its views, its back (Esc) first. */
+@Composable
+private fun ActivityLayer(a: android.app.Activity) {
+    CompositionLocalProvider(
+        androidx.compose.ui.platform.LocalContext provides a,
+        androidx.activity.compose.LocalOnBackPressedDispatcherOwner provides a,
+        androidx.lifecycle.compose.LocalLifecycleOwner provides a,
+        androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides a,
+    ) {
+        Box(Modifier.fillMaxSize().background(Color(0xFF0A0A0C))) { a.content.value?.let { ViewNode(it) } }
     }
 }
 

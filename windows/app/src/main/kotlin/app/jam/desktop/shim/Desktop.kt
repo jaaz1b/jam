@@ -84,6 +84,7 @@ object Intents {
                     stream != null -> Files.file(stream)?.let { Shell.reveal(it) }
                 }
             }
+            cls != null && !cls.endsWith(".MainActivity") && isActivity(cls) -> Windows.openActivity(intent)
             cls != null && (cls.endsWith("MainActivity") || cls.startsWith("app.myspoti")) && data == null -> onAppIntent?.invoke(intent)
             data != null && data.scheme in setOf("http", "https", "mailto") -> Shell.browse(data.toString())
             data != null && data.scheme == "file" -> Files.file(data)?.let { Shell.open(it) }
@@ -93,6 +94,8 @@ object Intents {
             else -> Desk.log('W', "Intents", "nothing on the PC handles $intent", null)
         }
     }
+
+    private fun isActivity(cls: String) = runCatching { android.app.Activity::class.java.isAssignableFrom(Class.forName(cls)) }.getOrDefault(false)
 
     fun service(intent: Intent): ComponentName? {
         val cls = intent.component?.className ?: return null
