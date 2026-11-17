@@ -1,0 +1,3 @@
+# Files of the Android app (android/base/app/src/main/java) that the Windows app leaves out: the
+# Android-only parts (widgets, Android Auto, the watch, the TV, PiP, the phone's media session) and
+# the ones replaced by a PC version in src/main/kotlin (same class names and functions).

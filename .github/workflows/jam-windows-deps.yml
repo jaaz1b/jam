@@ -1,0 +1,55 @@
+# Jam for Windows, development aid: resolves every dependency of the Windows build (windows/) on a
+# Linux runner and publishes the Gradle cache (dependencies, the Gradle distribution, the JDK 17
+# toolchain) as the asset of the jam-windows-deps pre-release, so the build can be compiled
+# offline elsewhere. Also attaches the first compile's log.
+name: Jam for Windows deps
+
+on:
+  push:
+    branches: [jam-windows]
+    paths:
+      - 'windows/**.gradle.kts'
+      - 'windows/gradle/**'
+      - 'windows/buildSrc/**'
+      - 'android/base/gradle/libs.versions.toml'
+      - '.github/workflows/jam-windows-deps.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Resolve
+        run: |
+          cd windows
+          ./gradlew --version
+          ./gradlew :app:dependencies --configuration runtimeClasspath > ../deps-runtime.txt 2>&1 || true
+          ./gradlew :app:dependencies --configuration compileClasspath > ../deps-compile.txt 2>&1 || true
+          ./gradlew :api-spotify:compileKotlin :extensions:compileKotlin :engine:compileKotlinJvm --continue > ../modules.txt 2>&1 || true
+          ./gradlew :app:compileKotlin --continue > ../compile.txt 2>&1 || true
+          ./gradlew --stop
+          grep -E "FAILED|Could not (find|resolve)" ../deps-*.txt | head -40 || true
+          tail -5 ../compile.txt
+      - name: Pack the Gradle cache
+        run: |
+          cd ~
+          rm -rf .gradle/caches/modules-2/*.lock .gradle/caches/modules-2/gc.properties
+          tar -czf "$GITHUB_WORKSPACE/gradle-cache.tgz" .gradle/caches/modules-2 .gradle/wrapper/dists .gradle/jdks 2>/dev/null || tar -czf "$GITHUB_WORKSPACE/gradle-cache.tgz" .gradle/caches/modules-2 .gradle/wrapper/dists
+          ls -la "$GITHUB_WORKSPACE/gradle-cache.tgz"
+          cd "$GITHUB_WORKSPACE" && tar -czf logs.tgz deps-runtime.txt deps-compile.txt modules.txt compile.txt
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view jam-windows-deps -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 || \
+            gh release create jam-windows-deps -R "$GITHUB_REPOSITORY" --prerelease --target "$GITHUB_SHA" --title "Jam for Windows: build cache (development)" --notes "Gradle cache for building Jam for Windows offline. Not an app release."
+          gh release upload jam-windows-deps gradle-cache.tgz logs.tgz --clobber -R "$GITHUB_REPOSITORY"
