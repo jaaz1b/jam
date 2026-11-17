@@ -99,12 +99,21 @@ class DesktopPlayer(
             decode = Ffmpeg.decode(url, startMs + item.clippingConfiguration.startPositionMs, clipEnd)
             Thread({
                 val buf = ByteArray(3840 * 2) // 40 ms
+                var heard = false
                 try {
                     while (!stopped) {
                         var got = 0
                         while (got < buf.size) { val n = decode.pcm.read(buf, got, buf.size - got); if (n < 0) break; got += n }
-                        if (got > 0) chunks.put(buf.copyOf(got - got % 4))
+                        if (got > 0) { heard = true; chunks.put(buf.copyOf(got - got % 4)) }
                         if (got < buf.size) break
+                    }
+                    if (!heard && decode.codec == null && !stopped) {
+                        runCatching { decode.process.waitFor(5, TimeUnit.SECONDS) }; Thread.sleep(60)
+                        val ms = (clipEnd ?: decode.durationMs) - startMs
+                        if (decode.codec == null && ms > 0) {
+                            var left = ms * Ffmpeg.RATE / 1000 * 4
+                            while (left > 0 && !stopped) { val n = minOf(left, buf.size.toLong()).toInt(); chunks.put(ByteArray(n - n % 4)); left -= n }
+                        }
                     }
                 } catch (_: Throwable) {}
                 eof = true
@@ -407,9 +416,22 @@ class DesktopPlayer(
     override fun getAudioFormat(): Format? = audioFormat
     override fun getVideoFormat(): Format? = null
     override fun setVideoScalingMode(mode: Int) {}
-    override fun getVideoSize(): VideoSize = VideoSize.UNKNOWN
-    override fun setVideoTextureView(v: android.view.TextureView?) {}
-    override fun clearVideoTextureView(v: android.view.TextureView?) {}
+    override fun getVideoSize(): VideoSize = videoSize
+    override fun setVideoTextureView(v: android.view.TextureView?) { videoView = v; VideoView.targets[v ?: return] = this }
+    override fun clearVideoTextureView(v: android.view.TextureView?) { if (v != null && videoView === v) videoView = null; if (v != null && VideoView.targets[v] === this) VideoView.targets.remove(v) }
+
+    // ---- video: drawn by VideoView (a second ffmpeg reading the same item), not by this engine
+    @Volatile private var videoSize = VideoSize.UNKNOWN
+    @Volatile var videoView: android.view.TextureView? = null
+    /** The current item's bytes, as the engine's decoder reads them (MediaServer), or null. */
+    fun videoSource(): String? = current?.url
+    /** The video's first frame is on screen (CanvasPlayer, MusicVideoController wait for it). */
+    fun videoShown(w: Int, h: Int) {
+        val size = VideoSize(w, h)
+        val changed = size.width != videoSize.width || size.height != videoSize.height
+        videoSize = size
+        Desk.post { if (changed) listeners.forEach { it.onVideoSizeChanged(size) }; listeners.forEach { it.onRenderedFirstFrame() } }
+    }
     override fun setVideoSurface(s: android.view.Surface?) {}
     override fun clearVideoSurface() {}
     override fun isCommandAvailable(c: Int) = true

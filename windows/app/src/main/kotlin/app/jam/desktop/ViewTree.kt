@@ -47,6 +47,8 @@ fun ViewNode(v: View, modifier: Modifier = Modifier.fillMaxSize()) {
     when (v) {
         is ComposeView -> Box(m) { v.content.value?.invoke() }
         is WebView -> if (vis == View.VISIBLE && v.alpha > 0.01f) WebSurface(v, m) else Box(modifier.size(0.dp))
+        is androidx.media3.ui.PlayerView -> app.jam.desktop.media.VideoView.Video(v, m, zoom = true) { v.player as? app.jam.desktop.media.DesktopPlayer }
+        is android.view.TextureView -> app.jam.desktop.media.VideoView.Video(v, m, zoom = false) { app.jam.desktop.media.VideoView.targets[v] }
         is ViewGroup -> Box(m) { for (c in v.children.toList()) ViewNode(c, sizeOf(c)) }
         else -> Box(m)
     }
