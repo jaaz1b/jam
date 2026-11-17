@@ -46,6 +46,7 @@ object Session {
                 val b = Browser.start(exe).also { browser = it }
                 _state.value = SessionState.Starting("Connecting to Spotify")
                 val h = CdpHost.connect(b.cdpUrl).also { host = it }
+                b.hide()
                 val a = SpotifyApi(h, scope, language = java.util.Locale.getDefault().language.ifBlank { "en" }).also { api = it }
                 // Every page load (start, sign-in, a reload) needs the bridge injected again.
                 scope.launch { while (true) { h.awaitLoad(); runCatching { a.onPageLoaded() } } }

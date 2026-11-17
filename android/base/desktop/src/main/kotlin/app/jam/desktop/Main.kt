@@ -76,7 +76,12 @@ fun main(args: Array<String>) {
     }
     Session.start()
     application {
-        val windowState = rememberWindowState(size = DpSize(1280.dp, 820.dp))
+        // Fits the screen (less the taskbar), centred.
+        val screen = java.awt.GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+        val windowState = rememberWindowState(
+            size = DpSize(minOf(1280, screen.width).dp, minOf(820, screen.height).dp),
+            position = androidx.compose.ui.window.WindowPosition(Alignment.Center),
+        )
         Window(
             onCloseRequest = { Discord.clear(); Session.stop(); exitApplication() },
             state = windowState,

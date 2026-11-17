@@ -39,21 +39,25 @@ class Browser private constructor(private val process: Process, val port: Int) {
     val alive: Boolean get() = process.isAlive
 
     /** Brings the Web Player's window on screen, in front, for the user to sign in. */
-    suspend fun show() = bounds(left = 160, top = 90, width = 1000, height = 780)
+    suspend fun show() = bounds(intArrayOf(160, 90, 1000, 780))
 
-    /** Back off-screen. */
-    suspend fun hide() = bounds(left = -32000, top = -32000, width = 1000, height = 780)
+    /** Out of sight again: minimised (Windows keeps a window it starts off-screen partly in view). */
+    suspend fun hide() = bounds(null)
 
-    private suspend fun bounds(left: Int, top: Int, width: Int, height: Int) = runCatching {
+    private suspend fun bounds(at: IntArray?) = runCatching {
         val target = spotifyTarget() ?: return@runCatching
         browserCall { send ->
             val win = send("Browser.getWindowForTarget", buildJsonObject { put("targetId", target) })["windowId"]!!.jsonPrimitive.int
             send("Browser.setWindowBounds", buildJsonObject { put("windowId", win); putJsonObject("bounds") { put("windowState", "normal") } })
-            send("Browser.setWindowBounds", buildJsonObject {
-                put("windowId", win)
-                putJsonObject("bounds") { put("left", left); put("top", top); put("width", width); put("height", height) }
-            })
-            if (left >= 0) send("Target.activateTarget", buildJsonObject { put("targetId", target) })
+            if (at == null) {
+                send("Browser.setWindowBounds", buildJsonObject { put("windowId", win); putJsonObject("bounds") { put("windowState", "minimized") } })
+            } else {
+                send("Browser.setWindowBounds", buildJsonObject {
+                    put("windowId", win)
+                    putJsonObject("bounds") { put("left", at[0]); put("top", at[1]); put("width", at[2]); put("height", at[3]) }
+                })
+                send("Target.activateTarget", buildJsonObject { put("targetId", target) })
+            }
         }
     }
 
