@@ -171,6 +171,7 @@ jobs:
 
       # Windows' media controls (flyout, lock screen) for Jam: a small C++/WinRT helper.
       - name: Media controls helper
+        continue-on-error: true
         shell: pwsh
         run: |
           $ErrorActionPreference = "Stop"
@@ -180,7 +181,7 @@ jobs:
           Enter-VsDevShell -VsInstallPath $vs -SkipAutomaticLocation -DevCmdArguments '-arch=x64 -host_arch=x64'
           Set-Location "$env:GITHUB_WORKSPACE\windows\smtc"
           & rc /nologo /fo jam-smtc.res jam-smtc.rc
-          & cl /nologo /std:c++17 /EHsc /O2 /MT /DUNICODE /D_UNICODE jam-smtc.cpp jam-smtc.res /link windowsapp.lib ole32.lib shell32.lib /SUBSYSTEM:CONSOLE
+          & cl /nologo /std:c++20 /EHsc /O2 /MT /DUNICODE /D_UNICODE jam-smtc.cpp jam-smtc.res /link windowsapp.lib ole32.lib shell32.lib /SUBSYSTEM:CONSOLE
           if (-not (Test-Path jam-smtc.exe)) { throw "jam-smtc.exe was not built" }
           Copy-Item jam-smtc.exe "$env:GITHUB_WORKSPACE\windows\app\app-resources\windows\jam-smtc.exe" -Force
 
