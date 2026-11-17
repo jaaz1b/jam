@@ -145,7 +145,9 @@ object Keys {
         val keyCode = awt?.keyCode ?: ev.key.nativeKeyCode
         val code = vk[keyCode] ?: keyCode
         val name = names[keyCode]
-        val cp = ev.utf16CodePoint.takeIf { it > 0 } ?: awt?.keyChar?.takeIf { it != java.awt.event.KeyEvent.CHAR_UNDEFINED }?.code ?: 0
+        // 0xFFFF is "no character" (AWT's CHAR_UNDEFINED, e.g. Shift on its own under Windows).
+        val cp = (ev.utf16CodePoint.takeIf { it in 1..0xFFFE } ?: awt?.keyChar?.takeIf { it != java.awt.event.KeyEvent.CHAR_UNDEFINED }?.code ?: 0)
+            .takeIf { keyCode !in setOf(16, 17, 18, 20, 157, 524, 525) } ?: 0
         val ch = if (cp > 0) String(Character.toChars(cp)) else ""
         val printable = cp >= 32 && cp != 127 && (mods and 2) == 0
         if (logged < 30) { logged++; app.jam.desktop.shim.Desk.log('D', "Keys", "${ev.type} key=$keyCode cp=$cp mods=$mods", null) }
