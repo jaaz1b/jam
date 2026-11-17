@@ -9,7 +9,8 @@ public final class FileDataSource extends BaseDataSource {
     public FileDataSource() { super(false); }
     @Override public long open(DataSpec s) throws IOException {
         uri = s.uri; transferInitializing(s);
-        java.io.File f = s.uri.getScheme() == null || "file".equals(s.uri.getScheme()) ? new java.io.File(s.uri.getPath()) : null;
+        // A content:// address (the PC's Music folder as MediaStore, a picked file): its file.
+        java.io.File f = s.uri.getScheme() == null || "file".equals(s.uri.getScheme()) ? new java.io.File(s.uri.getPath()) : app.jam.desktop.shim.Files.INSTANCE.file(s.uri);
         if (f == null || !f.exists()) throw new DataSourceException(new java.io.FileNotFoundException(String.valueOf(s.uri)), androidx.media3.common.PlaybackException.ERROR_CODE_IO_FILE_NOT_FOUND);
         file = new RandomAccessFile(f, "r"); file.seek(s.position);
         remaining = s.length == -1 ? file.length() - s.position : s.length;

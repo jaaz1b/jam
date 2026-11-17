@@ -57,7 +57,21 @@ object Themes {
         Theme("ocean", "Ocean", 0xFF061418, 0xFF0F252B, 0xFF2ED3C6, "Deep sea teal"),
         Theme("berry", "Strawberry Jam", 0xFF1A0B12, 0xFF2C1520, 0xFFFF4F7B, "Jam's jar, in colour"),
         Theme("mono", "Monochrome", 0xFF101010, 0xFF1E1E1E, 0xFFE8E8E8, "Black, white and greys only"),
+        Theme("aurora", "Aurora", 0xFF0A1416, 0xFF132328, 0xFF7CF5C4, "Northern lights over a polar night"),
+        Theme("sakura", "Sakura", 0xFF1A1116, 0xFF2A1B23, 0xFFFF9EC6, "Cherry blossoms at dusk"),
+        Theme("lavender", "Lavender Haze", 0xFF15121F, 0xFF221D32, 0xFFB9A6FF, "Soft violet, half asleep"),
+        Theme("synthwave", "Synthwave", 0xFF140A1F, 0xFF231035, 0xFFFF4FD8, "Neon pink on an 80s night drive"),
+        Theme("coffee", "Coffee", 0xFF16110D, 0xFF241B15, 0xFFD4A373, "Dark roast with a little cream"),
+        Theme("arctic", "Arctic", 0xFF0C141B, 0xFF16212B, 0xFF9AD7FF, "Cold air, clear ice"),
+        Theme("matcha", "Matcha", 0xFF10150F, 0xFF1B2319, 0xFFA8D672, "Green tea, calm and bright"),
+        Theme("crimson", "Crimson", 0xFF160A0C, 0xFF261114, 0xFFFF4D5E, "Deep red velvet"),
+        Theme("solar", "Solar", 0xFF16130A, 0xFF262011, 0xFFFFC53D, "Golden hour"),
+        Theme("graphite", "Graphite", 0xFF141414, 0xFF1F1F1F, 0xFF9EA7B3, "Quiet grey steel"),
+        Theme(SONG, "Song Colours", null, null, null, "Follows the cover of the song playing, like Apple Music"),
     )
+    const val SONG = "song"
+    /** The cover's main colour, for [SONG] (set by the Studio window as songs change). */
+    val songColor = mutableStateOf<Color?>(null)
 
     private val prefs by lazy { android.content.Prefs.of("jam_theme") }
     var current by mutableStateOf(all.firstOrNull { it.id == prefs.getString("id", "jam") } ?: all[0])
@@ -66,15 +80,32 @@ object Themes {
     fun set(t: Theme) { current = t; prefs.edit().putString("id", t.id).apply() }
 
     /** The theme's colour for a look key (UiStyle.ACCENT / BACKGROUND / SURFACE), or null (the app's own). */
-    fun color(key: String): Color? = when (key) {
-        UiStyle.BACKGROUND -> current.background
-        UiStyle.SURFACE -> current.surface
-        UiStyle.ACCENT -> current.accent
-        else -> null
-    }?.let { Color(it) }
+    fun color(key: String): Color? {
+        if (current.id == SONG) {
+            val c = songColor.value ?: return null
+            return when (key) {
+                UiStyle.BACKGROUND -> lerp(Color.Black, c, 0.16f)
+                UiStyle.SURFACE -> lerp(Color.Black, c, 0.26f)
+                UiStyle.ACCENT -> lerp(c, Color.White, 0.25f)
+                else -> null
+            }
+        }
+        return when (key) {
+            UiStyle.BACKGROUND -> current.background
+            UiStyle.SURFACE -> current.surface
+            UiStyle.ACCENT -> current.accent
+            else -> null
+        }?.let { Color(it) }
+    }
+
+    private fun lerp(a: Color, b: Color, f: Float) = androidx.compose.ui.graphics.lerp(a, b, f)
+
+    /** The page colour of the theme (Song Colours: the song's, else Jam's). */
+    val page: Color get() = color(UiStyle.BACKGROUND) ?: Color(0xFF0F0F13)
+    val raised: Color get() = color(UiStyle.SURFACE) ?: Color(0xFF1A1A21)
 
     /** The window's own background (behind the app's pages). */
-    val window: Color get() = current.background?.let { Color(it) } ?: Color(0xFF0A0A0C)
+    val window: Color get() = color(UiStyle.BACKGROUND) ?: Color(0xFF0A0A0C)
 }
 
 /** The settings row (Classic look): the theme in use, the picker on a click. */
@@ -99,11 +130,21 @@ fun ImmersiveThemesRow() {
 @Composable
 fun ThemePicker(onDismiss: () -> Unit) {
     Dialog(onDismissRequest = onDismiss) {
-        Column(Modifier.width(640.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF17171C)).padding(24.dp)) {
+        Column(Modifier.width(720.dp).clip(RoundedCornerShape(24.dp)).background(Color(0xFF17171C)).padding(24.dp)) {
             Text("Theme", color = Color.White, fontSize = 22.sp, fontWeight = FontWeight.Bold)
             Text("Colours for every page. The Immersive look keeps taking its colours from the song's cover.", color = Color(0xFFB8B8C6), fontSize = 13.sp)
             Spacer(Modifier.height(16.dp))
-            LazyVerticalGrid(GridCells.Fixed(3), Modifier.height(460.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text("Layout", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val studio = app.jam.desktop.studio.Studio.on.value
+                LayoutCard("Studio", "Sidebar, player on top, Big Picture lyrics — made for the PC", studio, Modifier.weight(1f)) { app.jam.desktop.studio.Studio.setOn(true) }
+                LayoutCard("Phone", "The look as on Android: tabs and the mini player", !studio, Modifier.weight(1f)) { app.jam.desktop.studio.Studio.setOn(false) }
+            }
+            Spacer(Modifier.height(16.dp))
+            Text("Colours", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+            Spacer(Modifier.height(8.dp))
+            LazyVerticalGrid(GridCells.Fixed(4), Modifier.height(400.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 items(Themes.all) { t -> Swatch(t, t.id == Themes.current.id) { Themes.set(t) } }
             }
             Spacer(Modifier.height(12.dp))
@@ -116,10 +157,23 @@ fun ThemePicker(onDismiss: () -> Unit) {
 }
 
 @Composable
+private fun LayoutCard(title: String, note: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {
+    Column(
+        modifier.clip(RoundedCornerShape(14.dp)).background(if (selected) Color(0x22FFFFFF) else Color(0x0FFFFFFF))
+            .border(if (selected) 2.dp else 1.dp, if (selected) com.music.spotui.ui.theme.AppAccent else Color(0x22FFFFFF), RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick).padding(14.dp),
+    ) {
+        Text(title, color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
+        Text(note, color = Color(0x99FFFFFF), fontSize = 11.sp, lineHeight = 14.sp)
+    }
+}
+
+@Composable
 private fun Swatch(t: Themes.Theme, selected: Boolean, onClick: () -> Unit) {
-    val bg = Color(t.background ?: 0xFF0F0F13)
-    val surface = Color(t.surface ?: 0xFF22222B)
-    val accent = t.accent?.let { Color(it) } ?: com.music.spotui.ui.theme.AppAccent
+    val song = if (t.id == Themes.SONG) Themes.songColor.value else null
+    val bg = song?.let { androidx.compose.ui.graphics.lerp(Color.Black, it, 0.16f) } ?: Color(t.background ?: 0xFF0F0F13)
+    val surface = song?.let { androidx.compose.ui.graphics.lerp(Color.Black, it, 0.3f) } ?: Color(t.surface ?: 0xFF22222B)
+    val accent = song ?: t.accent?.let { Color(it) } ?: com.music.spotui.ui.theme.AppAccent
     Column(
         Modifier.clip(RoundedCornerShape(16.dp)).background(bg)
             .border(if (selected) 2.dp else 1.dp, if (selected) accent else Color(0x22FFFFFF), RoundedCornerShape(16.dp))

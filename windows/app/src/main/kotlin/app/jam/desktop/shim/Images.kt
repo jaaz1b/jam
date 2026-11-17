@@ -30,7 +30,11 @@ object Images {
         ImageLoader.Builder(PlatformContext.INSTANCE)
             .components {
                 add(OkHttpNetworkFetcherFactory(callFactory = { http }))
-                add(coil3.map.Mapper<android.net.Uri, String> { data, _ -> data.toString().let { if (it.startsWith("file://")) it.removePrefix("file://") else it } })
+                add(coil3.map.Mapper<android.net.Uri, String> { data, _ ->
+                    if (data.scheme == "content") Files.file(data)?.absolutePath else data.toString().let { if (it.startsWith("file://")) it.removePrefix("file://") else it }
+                })
+                // content:// as text (the app keeps covers as strings): the file behind it.
+                add(coil3.map.Mapper<String, String> { data, _ -> if (data.startsWith("content://")) Files.file(android.net.Uri.parse(data))?.absolutePath else null })
                 add(coil3.map.Mapper<Int, String> { data, _ -> Res.file(data)?.let { p -> Res::class.java.classLoader.getResource("res/$p")?.toString() } })
             }
             .memoryCache { MemoryCache.Builder().maxSizeBytes(256L * 1024 * 1024).build() }

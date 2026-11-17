@@ -155,7 +155,11 @@ val jamVersion = (findProperty("jamWinVersion") as String?) ?: "1.0.0"
 compose.desktop {
     application {
         mainClass = "app.jam.desktop.MainKt"
-        jvmArgs += listOf("-Dfile.encoding=UTF-8", "-Xss4m", "-XX:+UseG1GC", "-Dsun.java2d.d3d=true")
+        jvmArgs += listOf("-Dfile.encoding=UTF-8", "-Xss4m", "-XX:+UseG1GC", "-Dsun.java2d.d3d=true",
+            // Faster starts: the classes Jam loads are kept, ready to map, in a class-data archive
+            // made by the first run (the install is per user, so its folder can be written).
+            "-XX:SharedArchiveFile=\$APPDIR/jam.jsa", "-XX:+AutoCreateSharedArchive",
+            "-XX:+UseStringDeduplication")
         nativeDistributions {
             targetFormats(TargetFormat.Msi, TargetFormat.Exe)
             packageName = "Jam"
@@ -197,4 +201,15 @@ tasks.register("printClasspath") {
     notCompatibleWithConfigurationCache("reads configurations")
     dependsOn("classes")
     doLast { println("CP=" + (sourceSets.main.get().runtimeClasspath).asPath) }
+}
+
+// The runtime's own class-data archive (lib/server/classes.jsa): the base Jam's archive builds on
+// (-XX:+AutoCreateSharedArchive needs it) and what makes the JDK's classes load fast.
+afterEvaluate {
+    tasks.findByName("createRuntimeImage")?.doLast {
+        val runtime = outputs.files.files.firstOrNull { File(it, "bin").isDirectory } ?: return@doLast
+        val java = File(runtime, if (System.getProperty("os.name").startsWith("Windows")) "bin/java.exe" else "bin/java")
+        if (java.isFile) runCatching { ProcessBuilder(java.absolutePath, "-Xshare:dump").inheritIO().start().waitFor() }
+            .onFailure { logger.warn("CDS archive: $it") }
+    }
 }

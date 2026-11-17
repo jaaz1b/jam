@@ -74,7 +74,8 @@ fun main(args: Array<String>) {
     Single.onLink = { link -> Intents.start(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link)).setClassName("app.jam.android", "app.myspoti.MainActivity")) }
 
     application(exitProcessOnExit = false) {
-        val state = rememberWindowState(size = DpSize(1280.dp, 820.dp), position = WindowPosition(Alignment.Center))
+        val state = rememberWindowState(size = DpSize(1360.dp, 860.dp), position = WindowPosition(Alignment.Center))
+        Shortcuts.state = state
         val now by SystemMedia.now
         // Closing the window keeps Jam playing in the tray (as Jam's other modes do); Quit is there.
         Tray(
@@ -103,8 +104,9 @@ fun main(args: Array<String>) {
                 if (keysSeen < 12) { keysSeen++; Desk.log('D', "Window", "key ${e.type} ${e.key} owner=${java.awt.KeyboardFocusManager.getCurrentKeyboardFocusManager().focusOwner?.javaClass?.simpleName}", null) }
                 // Back, as the phone's: Esc, Alt+Left, the mouse's back button (below).
                 if (e.type == KeyEventType.KeyDown && (e.key == Key.Escape || (e.isAltPressed && e.key == Key.DirectionLeft))) { back(activity.value); true }
-                else false
+                else Shortcuts.preview(e)
             },
+            onKeyEvent = { e -> Front.window?.let { w -> Shortcuts.handle(e, w) } ?: false },
         ) {
             LaunchedEffect(Unit) { Front.window = window; DarkTitleBar.apply(window); window.minimumSize = java.awt.Dimension(420, 640) }
             ActivityWindow(activity.value, Modifier.onPointerEvent(PointerEventType.Press) { e ->

@@ -76,6 +76,26 @@ object DarkTitleBar {
             val hwnd = WinDef.HWND(Native.getComponentPointer(w))
             dwm.DwmSetWindowAttribute(hwnd, 20, IntByReference(1), 4)          // dark mode
             dwm.DwmSetWindowAttribute(hwnd, 38, IntByReference(2), 4)          // Mica backdrop (Windows 11)
+            dwm.DwmSetWindowAttribute(hwnd, 33, IntByReference(2), 4)          // rounded corners (Windows 11)
+        }
+    }
+
+    /**
+     * The title bar in the window's own colour (Windows 11): it reads as part of the app, not as a
+     * strip over it. Its text white, its border the same colour.
+     */
+    fun caption(w: java.awt.Window, color: androidx.compose.ui.graphics.Color) {
+        if (!Desk.isWindows) return
+        runCatching {
+            val dwm = Native.load("dwmapi", Dwm::class.java)
+            val hwnd = WinDef.HWND(Native.getComponentPointer(w))
+            fun ref(c: androidx.compose.ui.graphics.Color): Int {
+                val r = (c.red * 255).toInt(); val g = (c.green * 255).toInt(); val b = (c.blue * 255).toInt()
+                return r or (g shl 8) or (b shl 16) // COLORREF: 0x00BBGGRR
+            }
+            dwm.DwmSetWindowAttribute(hwnd, 35, IntByReference(ref(color)), 4)   // caption
+            dwm.DwmSetWindowAttribute(hwnd, 34, IntByReference(ref(color)), 4)   // border
+            dwm.DwmSetWindowAttribute(hwnd, 36, IntByReference(0x00F4F4F4), 4)  // caption text
         }
     }
 }
