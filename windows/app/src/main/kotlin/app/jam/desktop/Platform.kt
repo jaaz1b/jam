@@ -36,6 +36,14 @@ import com.sun.jna.win32.StdCallLibrary
 object WebSheet {
     private val open = mutableStateOf<WebView?>(null)
     fun open(url: String) = Desk.post {
+        // Discord's sign-in goes to the PC's own browser, where Discord is usually signed in already
+        // and its page works as Discord means it to (in Jam's page it never loaded the app: stuck
+        // on "…"). Discord then opens jamdiscord://…, registered for Jam, which hands it over.
+        if (url.startsWith("https://discord.com/oauth2/authorize") && AppLinks.register()) {
+            app.jam.desktop.shim.Shell.browse(url)
+            app.jam.desktop.shim.Toasts.show("Finish connecting Discord in your browser, then come back to Jam.", true)
+            return@post
+        }
         val v = open.value ?: WebView(DesktopApp.activity ?: DesktopApp.context).also { open.value = it }
         v.settings.javaScriptEnabled = true; v.settings.domStorageEnabled = true
         v.webViewClient = object : WebViewClient() {
@@ -121,9 +129,48 @@ object Single {
                 server.accept().use { s ->
                     val link = s.getInputStream().bufferedReader().readLine().orEmpty().trim()
                     s.getOutputStream().write(1)
-                    Desk.post { if (YtmCompanion.running) YtmCompanion.front() else { Front.request(); if (link.isNotEmpty()) onLink?.invoke(link) } }
+                    Desk.post {
+                        if (AppLinks.handle(link)) return@post
+                        if (YtmCompanion.running) YtmCompanion.front() else { Front.request(); if (link.isNotEmpty()) onLink?.invoke(link) }
+                    }
                 }
             }
         }, "jam-single").apply { isDaemon = true }.start()
+    }
+}
+
+
+/**
+ * Jam's own link scheme on Windows (jamdiscord://, Discord's sign-in coming back): registered for the
+ * user (HKCU\Software\Classes), opening Jam.exe with the link, which the running Jam then receives.
+ */
+object AppLinks {
+    @Volatile private var done = false
+    fun register(): Boolean {
+        if (done) return true
+        if (!Desk.isWindows) return false
+        val exe = ProcessHandle.current().info().command().orElse(null)?.takeIf { it.endsWith(".exe", true) && !it.endsWith("java.exe", true) && !it.endsWith("javaw.exe", true) } ?: return false
+        done = runCatching {
+            val u = com.sun.jna.platform.win32.Advapi32Util::class.java
+            val hk = com.sun.jna.platform.win32.WinReg.HKEY_CURRENT_USER
+            val key = "Software\\Classes\\jamdiscord"
+            com.sun.jna.platform.win32.Advapi32Util.registryCreateKey(hk, "Software\\Classes", "jamdiscord")
+            com.sun.jna.platform.win32.Advapi32Util.registrySetStringValue(hk, key, "", "URL:Jam Discord sign-in")
+            com.sun.jna.platform.win32.Advapi32Util.registrySetStringValue(hk, key, "URL Protocol", "")
+            com.sun.jna.platform.win32.Advapi32Util.registryCreateKey(hk, key, "shell")
+            com.sun.jna.platform.win32.Advapi32Util.registryCreateKey(hk, "$key\\shell", "open")
+            com.sun.jna.platform.win32.Advapi32Util.registryCreateKey(hk, "$key\\shell\\open", "command")
+            com.sun.jna.platform.win32.Advapi32Util.registrySetStringValue(hk, "$key\\shell\\open\\command", "", "\"$exe\" \"%1\"")
+            u != null
+        }.onFailure { Desk.log('W', "AppLinks", "register: $it", it) }.getOrDefault(false)
+        Desk.log('I', "AppLinks", "jamdiscord:// registered: $done", null)
+        return done
+    }
+
+    /** A link Jam was started with, or handed by a second start: true when it was Jam's own. */
+    fun handle(link: String): Boolean {
+        if (!link.startsWith("jamdiscord:")) return false
+        Desk.post { app.jam.android.Discord.onCallback(android.net.Uri.parse(link)); Front.request() }
+        return true
     }
 }
