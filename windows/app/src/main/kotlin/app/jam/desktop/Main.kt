@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
@@ -167,7 +168,8 @@ fun ActivityWindow(a: android.app.Activity, modifier: Modifier) {
         androidx.lifecycle.compose.LocalLifecycleOwner provides a,
         androidx.lifecycle.viewmodel.compose.LocalViewModelStoreOwner provides a,
     ) {
-        Box(modifier.fillMaxSize().background(app.jam.desktop.themes.Themes.window)) {
+        Box(modifier.fillMaxSize().background(app.jam.desktop.themes.Themes.window)
+            .then(if (app.jam.desktop.studio.Studio.pointer.value) Modifier.pointerHoverIcon(app.jam.desktop.studio.Cursors.arrow()) else Modifier)) {
             root?.let { ViewNode(it) }
             for (top in Windows.stack.toList()) ActivityLayer(top)
             WebSheet.Host()

@@ -1,6 +1,8 @@
 package com.music.spotui.pass
 
 import android.widget.Toast
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import app.myspoti.engine.R
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
@@ -229,6 +231,18 @@ fun PassOfferDialog(onDismiss: () -> Unit) {
                     Text(stringResource(R.string.pass_offer_hint), color = Color.White.copy(alpha = 0.7f), fontSize = 14.sp, textAlign = TextAlign.Center)
                 }
             }
+            // Or the session itself, to paste on the phone (Sign in with a session code): no Wi-Fi
+            // between the two needed.
+            TextButton(onClick = {
+                val v = runCatching { app.myspoti.host.android.MyspotiRuntime.host.cookies().getCookie("https://open.spotify.com") }.getOrNull()
+                    ?.split(';')?.map { it.trim() }?.firstOrNull { it.startsWith("sp_dc=") }?.substringAfter('=')
+                if (v.isNullOrBlank()) Toast.makeText(context, R.string.cookie_none, Toast.LENGTH_LONG).show()
+                else {
+                    val cm = context.getSystemService(android.content.ClipboardManager::class.java)
+                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("sp_dc", v))
+                    Toast.makeText(context, R.string.cookie_copied, Toast.LENGTH_LONG).show()
+                }
+            }) { Text(stringResource(R.string.cookie_copy)) }
             TextButton(onClick = onDismiss) { Text(stringResource(if (done != null) android.R.string.ok else android.R.string.cancel)) }
         }
     }
@@ -306,4 +320,65 @@ object PassTakeLinks {
 fun PassTakeHost() {
     val o by PassTakeLinks.pending.collectAsState()
     o?.let { offer -> androidx.compose.runtime.key(offer) { PassTakeConfirm(offer, onDismiss = { PassTakeLinks.pending.compareAndSet(offer, null) }) } }
+}
+
+/** Jam: the sp_dc value in what was pasted (the value, "sp_dc=…", or a whole cookie line), or null. */
+internal fun spDcOf(text: String): String? {
+    val t = text.trim().trim('"', '\'')
+    val v = Regex("""(?:^|[;\s])sp_dc\s*=\s*([A-Za-z0-9_\-]+)""").find(t)?.groupValues?.get(1) ?: t
+    return v.takeIf { it.length >= 40 && it.all { c -> c.isLetterOrDigit() || c == '-' || c == '_' } }
+}
+
+/**
+ * Jam: signing in with Spotify's session code (the sp_dc cookie) pasted, for a phone whose sign-in
+ * page Spotify refuses: no page, no network between devices. Applied as a received setup with
+ * only the session ([PassAndroid.apply]), then the app starts again, signed in.
+ */
+@Composable
+fun CookieSignInDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("") }
+    var bad by remember { mutableStateOf(false) }
+    var busy by remember { mutableStateOf(false) }
+    val clipboard = androidx.compose.ui.platform.LocalClipboardManager.current
+    AlertDialog(
+        onDismissRequest = { if (!busy) onDismiss() },
+        title = { Text(stringResource(R.string.cookie_sign_in)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(stringResource(R.string.cookie_sign_in_steps), fontSize = 13.sp, lineHeight = 18.sp)
+                androidx.compose.material3.OutlinedTextField(
+                    value = text, onValueChange = { text = it; bad = false }, singleLine = true,
+                    label = { Text(stringResource(R.string.cookie_sign_in_field)) },
+                    isError = bad, modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        TextButton(onClick = { clipboard.getText()?.text?.let { text = it.trim(); bad = false } }) { Text(stringResource(R.string.cookie_sign_in_paste)) }
+                    },
+                )
+                if (bad) Text(stringResource(R.string.cookie_sign_in_invalid), color = Color(0xFFFF8A80), fontSize = 12.sp)
+                Text(stringResource(R.string.cookie_sign_in_warning), fontSize = 12.sp, color = Color.Gray)
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && text.isNotBlank(), onClick = {
+                val v = spDcOf(text)
+                if (v == null) { bad = true; return@TextButton }
+                busy = true
+                scope.launch {
+                    val ok = withContext(Dispatchers.IO) {
+                        runCatching {
+                            PassAndroid.apply(context.applicationContext, app.myspoti.pass.PassPayload(
+                                from = "session code", prefs = emptyMap(), extensions = emptyList(), extensionFiles = emptyMap(),
+                                cookies = listOf(app.myspoti.pass.PassCookie("sp_dc", v)),
+                            ))
+                        }.getOrDefault(false)
+                    }
+                    if (ok) PassAndroid.restart(context.applicationContext)
+                    else { busy = false; Toast.makeText(context, context.getString(R.string.pass_take_failed, "the session was not saved"), Toast.LENGTH_LONG).show() }
+                }
+            }) { Text(stringResource(R.string.cookie_sign_in_go)) }
+        },
+        dismissButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) } },
+    )
 }

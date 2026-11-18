@@ -49,4 +49,15 @@
     <string name="pass_take_failed">Not signed in: %1$s</string>
     <string name="pass_take_wrong_code">This is the code for sending, not for signing in. On the computer use Settings › Other devices › Sign in another device.</string>
     <string name="pass_take_phone">Get it from another phone</string>
+    <string name="cookie_sign_in">Sign in with a session code</string>
+    <string name="cookie_sign_in_detail">Spotify\'s session code (the sp_dc cookie) from a computer where you\'re signed in: no sign-in page on this phone at all.</string>
+    <string name="cookie_sign_in_steps">1. On a computer, sign in at open.spotify.com (Chrome, Edge or Firefox).\n2. Press F12 › Application (Firefox: Storage) › Cookies › https://open.spotify.com.\n3. Copy the value of sp_dc and send it to this phone (an email or a note to yourself).\n   Or in Jam for Windows: Settings › Other devices › Sign in another device › Copy the session code.\n4. Paste it here.</string>
+    <string name="cookie_sign_in_field">sp_dc value</string>
+    <string name="cookie_sign_in_paste">Paste</string>
+    <string name="cookie_sign_in_go">Sign in</string>
+    <string name="cookie_sign_in_invalid">That doesn\'t look like an sp_dc value. Copy the whole value (a long string of letters, digits, - and _).</string>
+    <string name="cookie_sign_in_warning">Keep this code private: it signs anyone in as you, like a password. Signing out of Spotify everywhere makes it stop working.</string>
+    <string name="cookie_copy">Copy the session code</string>
+    <string name="cookie_copied">Session code copied. Paste it on your phone: Trouble signing in? › Sign in with a session code. Keep it private.</string>
+    <string name="cookie_none">No Spotify session here yet: sign in to Spotify first.</string>
 </resources>

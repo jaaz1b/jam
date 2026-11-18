@@ -163,6 +163,13 @@ fun WelcomeScreen(onLogin: () -> Unit) {
                     modifier = Modifier.pressable(0.96f, onClick = { taking = true }).clip(RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 8.dp),
                 )
                 if (taking) com.music.spotui.pass.PassTakeFlow(onDismiss = { taking = false })
+                var pasting by remember { mutableStateOf(false) }
+                Text(
+                    stringResource(R.string.cookie_sign_in),
+                    color = AppText, fontFamily = AppSans, fontWeight = FontWeight.SemiBold, fontSize = 15.sp,
+                    modifier = Modifier.pressable(0.96f, onClick = { pasting = true }).clip(RoundedCornerShape(50)).padding(horizontal = 16.dp, vertical = 8.dp),
+                )
+                if (pasting) com.music.spotui.pass.CookieSignInDialog(onDismiss = { pasting = false })
                 // Spotify's sign-in is the account choice's to explain when it is not the next page.
                 if (!choosesAccount) Text(
                     stringResource(R.string.welcome_privacy),

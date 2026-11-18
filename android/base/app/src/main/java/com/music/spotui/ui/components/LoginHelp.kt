@@ -73,6 +73,8 @@ fun LoginHelpDialog(onClose: () -> Unit) {
     val ctx = LocalContext.current
     var taking by remember { mutableStateOf(false) }
     var receiving by remember { mutableStateOf(false) }
+    var pasting by remember { mutableStateOf(false) }
+    if (pasting) { com.music.spotui.pass.CookieSignInDialog(onDismiss = { pasting = false }); return }
     if (taking) { com.music.spotui.pass.PassTakeFlow(onDismiss = { taking = false; onClose() }); return }
     if (receiving) { com.music.spotui.pass.PassReceiveDialog(onDismiss = { receiving = false; onClose() }); return }
     AlertDialog(
@@ -83,6 +85,7 @@ fun LoginHelpDialog(onClose: () -> Unit) {
             // Jam: other ways in when Spotify refuses this page ("Oops! Something went wrong"):
             // the sign-in of Jam on the computer, or of another phone, by a QR code on the same Wi-Fi.
             androidx.compose.foundation.layout.Column(verticalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(10.dp)) {
+                HelpChoice(stringResource(R.string.cookie_sign_in), stringResource(R.string.cookie_sign_in_detail)) { pasting = true }
                 HelpChoice(stringResource(R.string.pass_take), stringResource(R.string.pass_take_detail)) { taking = true }
                 HelpChoice(stringResource(R.string.pass_take_phone), stringResource(R.string.pass_receive_hint)) { receiving = true }
                 Text(stringResource(R.string.login_help_detail), color = AppText.copy(alpha = 0.6f), fontSize = 13.sp)

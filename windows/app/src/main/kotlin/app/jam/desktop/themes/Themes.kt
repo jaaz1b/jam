@@ -141,6 +141,12 @@ fun ThemePicker(onDismiss: () -> Unit) {
                 LayoutCard("Studio", "Sidebar, player on top, Big Picture lyrics — made for the PC", studio, Modifier.weight(1f)) { app.jam.desktop.studio.Studio.setOn(true) }
                 LayoutCard("Phone", "The look as on Android: tabs and the mini player", !studio, Modifier.weight(1f)) { app.jam.desktop.studio.Studio.setOn(false) }
             }
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val jam = app.jam.desktop.studio.Studio.pointer.value
+                LayoutCard("Jam pointer", "A mouse pointer in the theme's colour", jam, Modifier.weight(1f)) { app.jam.desktop.studio.Studio.setPointer(true) }
+                LayoutCard("Windows pointer", "The usual Windows mouse pointer", !jam, Modifier.weight(1f)) { app.jam.desktop.studio.Studio.setPointer(false) }
+            }
             Spacer(Modifier.height(16.dp))
             Text("Colours", color = Color.White, fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(8.dp))

@@ -185,6 +185,7 @@ private fun SongSide(withLyrics: Boolean) {
             Column(Modifier.weight(1f)) {
                 Text(Now.title, color = Color.White, fontSize = 24.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, letterSpacing = (-0.3).sp)
                 Text(Now.artist, color = Color(0xB3FFFFFF), fontSize = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                SourceBadge(Modifier.padding(top = 4.dp), large = true)
             }
             val liked = Now.liked
             Glyph(if (liked) Icons.Rounded.Favorite else Icons.Rounded.FavoriteBorder, "Like", active = liked, size = 24.dp, tint = Color.White) { Now.like(!liked) }
@@ -263,7 +264,7 @@ private fun LyricsColumn(lines: List<LyricLine>, synced: Boolean) {
                         .graphicsLayer { scaleX = grow; scaleY = grow; transformOrigin = TransformOrigin(0f, 0.5f); this.alpha = alpha }
                         .blur(blurAmount)
                         .clip(RoundedCornerShape(12.dp))
-                        .then(if (synced && line.timeMs > 0) Modifier.pointerHoverIcon(PointerIcon.Hand).clickable { Now.seek(line.timeMs); userScrollAt = 0 } else Modifier)
+                        .then(if (synced && line.timeMs > 0) Modifier.pointerHoverIcon(Cursors.handOr()).clickable { Now.seek(line.timeMs); userScrollAt = 0 } else Modifier)
                         .padding(horizontal = 14.dp, vertical = (10 * scale).dp),
                 ) {
                     Text(text, color = Color.White, fontSize = (34 * scale).sp, lineHeight = (42 * scale).sp, fontWeight = FontWeight.Bold, letterSpacing = (-0.4).sp)

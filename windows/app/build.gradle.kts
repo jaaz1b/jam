@@ -34,7 +34,7 @@ val androidOnly: List<String> = file("android-only.txt").readLines().map { it.tr
 
 val jamAndroid = rootDir.resolve("../ytm/src-tauri/gen/android/app/src/main")
 /** Jam for Android's own files the PC uses as they are (Discord's presence, its settings page and sources). */
-val jamAndroidFiles = listOf("Discord.kt", "Presence.kt", "Prefs.kt", "Player.kt", "SettingsActivity.kt", "DiscordCallbackActivity.kt", "Sources.kt", "CoverStore.kt")
+val jamAndroidFiles = listOf("Presence.kt", "Prefs.kt", "Player.kt", "SettingsActivity.kt", "DiscordCallbackActivity.kt", "Sources.kt", "CoverStore.kt")
 
 /**
  * The Android sources, as compiled here: the app's and the host's (less android-only.txt) and Jam for

@@ -125,6 +125,10 @@ object Studio {
     val lyricsScale by lazy { mutableFloatStateOf(prefs.getFloat("lyrics_scale", 1f)) }
     fun setLyricsScale(v: Float) { lyricsScale.floatValue = v; prefs.edit().putFloat("lyrics_scale", v).apply() }
 
+    /** Jam's own mouse pointer in the window (else Windows' own). */
+    val pointer by lazy { mutableStateOf(prefs.getBoolean("pointer", true)) }
+    fun setPointer(v: Boolean) { pointer.value = v; prefs.edit().putBoolean("pointer", v).apply() }
+
     var nav: NavHostController? = null
 
     fun open(route: String) {
@@ -259,7 +263,7 @@ private fun SearchField(onClick: () -> Unit) {
         Modifier.fillMaxWidth().height(34.dp).clip(RoundedCornerShape(9.dp))
             .background(if (hovered) Color(0x22FFFFFF) else Color(0x16FFFFFF))
             .border(1.dp, Color(0x10FFFFFF), RoundedCornerShape(9.dp))
-            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 10.dp),
+            .hoverable(hover).pointerHoverIcon(Cursors.handOr()).clickable(onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Icon(Icons.Rounded.Search, null, tint = Chrome.muted, modifier = Modifier.size(17.dp))
@@ -283,7 +287,7 @@ private fun SideRow(label: String, icon: ImageVector?, selected: Boolean, cover:
     val bg by animateColorAsState(when { selected -> Color(0x26FFFFFF); hovered -> Color(0x12FFFFFF); else -> Color.Transparent }, tween(140))
     Row(
         Modifier.fillMaxWidth().height(34.dp).clip(RoundedCornerShape(8.dp)).background(bg)
-            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand).clickable(onClick = onClick).padding(horizontal = 10.dp),
+            .hoverable(hover).pointerHoverIcon(Cursors.handOr()).clickable(onClick = onClick).padding(horizontal = 10.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         if (cover != null) AsyncImage(
@@ -352,7 +356,7 @@ internal fun PlayButton(size: Dp, light: Boolean = false) {
     Box(
         Modifier.padding(horizontal = 6.dp).size(size).graphicsLayer { scaleX = scale; scaleY = scale }
             .clip(CircleShape).background(if (light) Color.White else Color(0xFFF2F2F7))
-            .hoverable(hover).pointerHoverIcon(PointerIcon.Hand).clickable { Now.toggle() },
+            .hoverable(hover).pointerHoverIcon(Cursors.handOr()).clickable { Now.toggle() },
         contentAlignment = Alignment.Center,
     ) {
         Icon(if (playing) Icons.Rounded.Pause else Icons.Rounded.PlayArrow, if (playing) "Pause" else "Play", tint = Color(0xFF111114), modifier = Modifier.size(size * 0.6f))
@@ -378,7 +382,7 @@ internal fun Glyph(icon: ImageVector, label: String, active: Boolean = false, si
     ) {
         Box(
             Modifier.size(size + 18.dp).clip(CircleShape).background(if (hovered && enabled) Color(0x14FFFFFF) else Color.Transparent)
-                .hoverable(hover).pointerHoverIcon(if (enabled) PointerIcon.Hand else PointerIcon.Default)
+                .hoverable(hover).pointerHoverIcon(if (enabled) Cursors.handOr() else Cursors.arrowOr())
                 .clickable(enabled = enabled, onClick = onClick),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, label, tint = color, modifier = Modifier.size(size)) }
@@ -404,13 +408,13 @@ private fun Lcd() {
             AsyncImage(
                 model = Images.request(Now.cover, 128), imageLoader = Images.loader, contentDescription = "Open Big Picture",
                 contentScale = ContentScale.Crop,
-                modifier = Modifier.size(50.dp).background(Color(0x22FFFFFF)).pointerHoverIcon(PointerIcon.Hand).clickable { Studio.bigPicture.value = true },
+                modifier = Modifier.size(50.dp).background(Color(0x22FFFFFF)).pointerHoverIcon(Cursors.handOr()).clickable { Studio.bigPicture.value = true },
             )
             Column(Modifier.weight(1f).padding(horizontal = 12.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(Now.title, color = Chrome.text, fontSize = 13.5.sp, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(listOf(Now.artist, Now.album).filter { it.isNotBlank() }.joinToString(" — "), color = Chrome.muted, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
-            Spacer(Modifier.width(50.dp))
+            SourceBadge(Modifier.padding(end = 10.dp))
         }
         if (hovered && dur > 0) {
             Text(time(pos), color = Chrome.muted, fontSize = 10.5.sp, modifier = Modifier.align(Alignment.BottomStart).padding(start = 56.dp, bottom = 5.dp))
@@ -429,7 +433,7 @@ internal fun Seek(pos: Long, dur: Long, modifier: Modifier, thin: Boolean = fals
     val fraction = dragging ?: if (dur > 0) (pos.toFloat() / dur).coerceIn(0f, 1f) else 0f
     Box(
         modifier.onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
-            .pointerHoverIcon(PointerIcon.Hand)
+            .pointerHoverIcon(Cursors.handOr())
             .pointerInput(dur) { detectTapGestures { o -> if (dur > 0) Now.seek((o.x / width * dur).toLong()) } }
             .pointerInput(dur) {
                 detectDragGestures(
@@ -461,7 +465,7 @@ internal fun Volume(modifier: Modifier) {
         fun set(f: Float) { level = f.coerceIn(0f, 1f); Now.volume = (level * 100).toInt() }
         Box(
             Modifier.weight(1f).height(18.dp).onSizeChanged { width = it.width.toFloat().coerceAtLeast(1f) }
-                .pointerHoverIcon(PointerIcon.Hand)
+                .pointerHoverIcon(Cursors.handOr())
                 .pointerInput(Unit) { detectTapGestures { o -> set(o.x / width) } }
                 .pointerInput(Unit) { detectDragGestures { change, _ -> set(change.position.x / width) } }
                 .drawBehind {
@@ -471,4 +475,21 @@ internal fun Volume(modifier: Modifier) {
                 },
         )
     }
+}
+
+
+/**
+ * What plays and how (the source and its audio quality, as the app's players show it under the
+ * artist), when Settings › Source and quality in the player is on.
+ */
+@Composable
+internal fun SourceBadge(modifier: Modifier = Modifier, large: Boolean = false) {
+    if (!com.music.spotui.data.preferences.PlayerSourceLinePref.shown) return
+    val label = com.music.spotui.ui.components.playingSourceLabel()
+    if (label.isBlank()) return
+    if (large) Text(label, color = Color(0x99FFFFFF), fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = modifier)
+    else Text(
+        label, color = Chrome.muted, fontSize = 10.5.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+        modifier = modifier.widthIn(max = 180.dp).clip(RoundedCornerShape(5.dp)).border(1.dp, Color(0x33FFFFFF), RoundedCornerShape(5.dp)).padding(horizontal = 6.dp, vertical = 2.dp),
+    )
 }
