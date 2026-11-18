@@ -10,6 +10,8 @@ import androidx.compose.runtime.withFrameMillis
 import com.music.spotui.di.Graph
 import com.music.spotui.di.SongPlayer
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.debounce
+import kotlinx.coroutines.launch
 
 /** What plays, as the Studio look reads it: the app's own now-playing state (both looks use it). */
 object Now {
@@ -31,9 +33,30 @@ object Now {
     fun shuffle(on: Boolean) = SongPlayer.setShuffle(on)
     fun cycleRepeat() = SongPlayer.cycleRepeat()
     fun like(on: Boolean) = SongPlayer.setLiked(on)
+    /**
+     * The volume: of the device playing when it is another (Spotify Connect), else of this PC —
+     * the Web Player's own (Spotify's audio plays in its page) and Jam's engine's (extensions',
+     * local files'). Before, it only ever set the other device's, so on the PC it did nothing.
+     */
     var volume: Int
-        get() = SongPlayer.remoteVolume
-        set(v) = SongPlayer.setRemoteVolume(v)
+        get() = if (SongPlayer.activeDevice.value != null) SongPlayer.remoteVolume else (app.jam.desktop.media.Volume.level * 100).toInt()
+        set(v) {
+            val level = v.coerceIn(0, 100)
+            if (SongPlayer.activeDevice.value != null) { SongPlayer.setRemoteVolume(level); return }
+            app.jam.desktop.media.Volume.level = level / 100f
+            webVolume.value = level
+        }
+
+    /** The Web Player's volume, set once the dragging settles (each set is a call into its page). */
+    private val webVolume = kotlinx.coroutines.flow.MutableStateFlow(-1)
+    init {
+        @OptIn(kotlinx.coroutines.FlowPreview::class)
+        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.Main + kotlinx.coroutines.SupervisorJob()).launch {
+            webVolume.debounce(60).collect { v ->
+                if (v >= 0) runCatching { app.myspoti.host.android.MyspotiRuntime.spotify.player.setVolume(v / 100.0) }
+            }
+        }
+    }
     fun duration(): Long = SongPlayer.getDuration()
     fun position(): Long = SongPlayer.getCurrentPosition()
 }

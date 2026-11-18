@@ -28,3 +28,8 @@ com/music/spotui/ui/screens/SetupScreen.kt => STEP_PERMISSIONS\.takeIf \{ needPe
 com/music/spotui/ui/screens/SetupScreen.kt => fun next\(\) \{ if \(index \+ 1 < order\.size\) index\+\+ else onDone\(\) \} => fun next() { if (index + 1 < order.size) index++ else { Setup.done(context); onDone() } }
 # Studio (app.jam.desktop.studio): Jam for Windows' window layout — sidebar, player bar, Big Picture.
 com/music/spotui/App.kt => ^(\s*)val rail = com\.music\.spotui\.ui\.components\.windowSize\(\)\.navigationRail$ => $1val rail = com.music.spotui.ui.components.windowSize().navigationRail\n$1if (app.jam.desktop.studio.Studio.on.value) app.jam.desktop.studio.StudioShell(navController, immersive) else
+# Hover on the PC: the app's indication (and its press-to-shrink buttons') lights what the mouse is over.
+com/music/spotui/ui/theme/Theme.kt => ^(\s*)androidx\.compose\.ui\.platform\.LocalDensity provides$ => $1androidx.compose.foundation.LocalIndication provides app.jam.desktop.studio.HoverIndication,\n$1androidx.compose.ui.platform.LocalDensity provides
+com/music/spotui/ui/components/Motion.kt => \.clickable\(source, indication = null, enabled = enabled, role = androidx\.compose\.ui\.semantics\.Role\.Button, onClick = onClick\) => .then(app.jam.desktop.studio.handPointer()).clickable(source, indication = app.jam.desktop.studio.HoverIndication, enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
+# The hand pointer over everything clickable in the app's pages (a mouse needs to see it).
+* => \.(clickable|combinedClickable)([ ({]) => .then(app.jam.desktop.studio.handPointer()).$1$2
