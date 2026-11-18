@@ -35,6 +35,20 @@ class Edge private constructor(val profile: String, private val process: Process
             }
         }
         browser.fire("Target.setDiscoverTargets", json("discover" to true))
+        // The browser's real process (it may not be the one started), for hiding its windows.
+        runCatching {
+            browser.callSync("SystemInfo.getProcessInfo", JSONObject()).optJSONArray("processInfo")?.let { list ->
+                for (i in 0 until list.length()) list.getJSONObject(i).takeIf { it.optString("type") == "browser" }?.let { HiddenWindows.track(it.optLong("id")) }
+            }
+        }
+        // Tabs restored from an earlier run (the browser was closed with them open): not Jam's pages now.
+        runCatching {
+            val targets = browser.callSync("Target.getTargets", JSONObject()).optJSONArray("targetInfos")
+            for (i in 0 until (targets?.length() ?: 0)) {
+                val t = targets!!.getJSONObject(i)
+                if (t.optString("type") == "page" && t.optString("url") != "about:blank") closeTarget(t.getString("targetId"))
+            }
+        }
     }
 
     val alive: Boolean get() = process.isAlive
@@ -90,7 +104,7 @@ class Edge private constructor(val profile: String, private val process: Process
 
         /** Edge, Chrome or Chromium on this PC, or null. */
         fun find(): File? {
-            System.getProperty("jam.browser")?.let { File(it) }?.takeIf { it.isFile }?.let { return it }
+            (System.getProperty("jam.browser") ?: System.getenv("JAM_BROWSER"))?.let { File(it) }?.takeIf { it.isFile }?.let { return it }
             val env = { k: String -> System.getenv(k).orEmpty() }
             val candidates = if (Desk.isWindows) listOf(
                 "${env("ProgramFiles(x86)")}\\Microsoft\\Edge\\Application\\msedge.exe",
@@ -125,6 +139,9 @@ class Edge private constructor(val profile: String, private val process: Process
                 "--disable-features=CalculateNativeWinOcclusion,IntensiveWakeUpThrottling,msEdgeSidebarV2,msHubApps,EdgeCollections,msUndersideButton,msShowFirstRunPage,Translate,msEdgeShopping,msImplicitSignin",
                 "--window-position=-32000,-32000", "--window-size=1280,800",
                 "--hide-crash-restore-bubble", "--noerrdialogs", "--disable-session-crashed-bubble",
+                // Never the last run's tabs back, never a browser of its own (Chrome's "continue
+                // running in the background").
+                "--disable-background-mode", "--no-service-autorun",
                 "about:blank",
             )
             if (headless) args.add(1, "--headless=new")

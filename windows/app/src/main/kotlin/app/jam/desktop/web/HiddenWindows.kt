@@ -22,8 +22,22 @@ object HiddenWindows {
     /** Hides the windows of [process] (and its children) now and again over the next seconds, as they appear. */
     fun hide(process: Process) {
         if (!Desk.isWindows) return
-        browsers += process; pidsAt = 0; guard
-        for (ms in longArrayOf(0, 60, 150, 300, 600, 1200, 2500, 5000)) Desk.timer.schedule({ runCatching { pass(process) } }, ms, TimeUnit.MILLISECONDS)
+        browsers += process; pidsAt = 0; guard; sweep
+        for (ms in longArrayOf(0, 60, 150, 300, 600, 1200, 2500, 5000)) Desk.timer.schedule({ runCatching { pass() } }, ms, TimeUnit.MILLISECONDS)
+    }
+
+    /**
+     * The browser's own process, as it says (DevTools): Chrome or Edge can start again as another
+     * process (an update waiting, a relaunch), whose windows were not ours by the started one's tree —
+     * Chrome then showed, with its tabs (reported).
+     */
+    private val extraPids = java.util.concurrent.CopyOnWriteArraySet<Long>()
+    fun track(pid: Long) { if (Desk.isWindows && extraPids.add(pid)) { pidsAt = 0; Desk.timer.schedule({ runCatching { pass() } }, 0, TimeUnit.MILLISECONDS) } }
+
+    /** Every second and a half, any window of the browser that appeared since (a restored tab, a new window) goes too. */
+    private val sweep: Unit by lazy {
+        Desk.timer.scheduleWithFixedDelay({ runCatching { pass() } }, 1500, 1500, TimeUnit.MILLISECONDS)
+        Unit
     }
 
     private val browsers = java.util.concurrent.CopyOnWriteArraySet<Process>()
@@ -59,13 +73,18 @@ object HiddenWindows {
     private fun browserPids(): Set<Long> {
         if (System.currentTimeMillis() - pidsAt < 3000) return pids
         browsers.removeIf { !it.isAlive }
-        pids = HashSet<Long>().apply { for (p in browsers) { add(p.pid()); runCatching { p.toHandle().descendants().forEach { add(it.pid()) } } } }
+        pids = HashSet<Long>().apply {
+            for (p in browsers) { add(p.pid()); runCatching { p.toHandle().descendants().forEach { add(it.pid()) } } }
+            for (pid in extraPids) { add(pid); runCatching { ProcessHandle.of(pid).ifPresent { h -> h.descendants().forEach { add(it.pid()) } } } }
+        }
         pidsAt = System.currentTimeMillis()
         return pids
     }
 
-    private fun pass(process: Process) {
-        val pids = HashSet<Long>().apply { add(process.pid()); process.toHandle().descendants().forEach { add(it.pid()) } }
+    private fun pass() {
+        pidsAt = 0
+        val pids = browserPids()
+        if (pids.isEmpty()) return
         val u = User32.INSTANCE
         u.EnumWindows({ hwnd, _ ->
             val pid = IntByReference(); u.GetWindowThreadProcessId(hwnd, pid)

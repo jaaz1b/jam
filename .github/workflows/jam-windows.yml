@@ -260,6 +260,20 @@ jobs:
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
           Get-Process msedge -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
           $env:JAM_DEV_WEB = ''
+          # With Google Chrome as the hidden browser (a PC without Edge): nothing of it may show.
+          Start-Sleep -Seconds 3
+          $chrome = @("$env:ProgramFiles\Google\Chrome\Application\chrome.exe", "${env:ProgramFiles(x86)}\Google\Chrome\Application\chrome.exe") | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if ($chrome) {
+            $env:JAM_BROWSER = $chrome
+            $p = Start-Process -FilePath $app.FullName -PassThru
+            Start-Sleep -Seconds 45
+            Shot "with-chrome"
+            "---- with Chrome: visible chrome windows" | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+            Get-Process chrome -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne 0 } | Select-Object Id, MainWindowTitle | Out-File -Append "$env:GITHUB_WORKSPACE\out\first-start.txt"
+            Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+            Get-Process chrome -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+            $env:JAM_BROWSER = ''
+          }
 
       - name: Release
         shell: bash
