@@ -59,6 +59,10 @@ object ServiceHost {
 
 /** Notifications: the ongoing media one feeds Windows' media controls; others become toasts in the window. */
 object Notices {
+    /** A message for the person, in a dialog over the window (a refusal explained, what to do). */
+    val alert = androidx.compose.runtime.mutableStateOf<Pair<String, String>?>(null)
+    fun alert(title: String, text: String) { alert.value = title to text; app.jam.desktop.Front.request() }
+
     @Volatile var onNotice: ((tag: String?, id: Int, n: android.app.Notification) -> Unit)? = null
     fun notify(tag: String?, id: Int, n: android.app.Notification) {
         onNotice?.invoke(tag, id, n) ?: run {

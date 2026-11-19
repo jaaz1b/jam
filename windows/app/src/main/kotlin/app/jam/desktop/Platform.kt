@@ -36,14 +36,6 @@ import com.sun.jna.win32.StdCallLibrary
 object WebSheet {
     private val open = mutableStateOf<WebView?>(null)
     fun open(url: String) = Desk.post {
-        // Discord's sign-in goes to the PC's own browser, where Discord is usually signed in already
-        // and its page works as Discord means it to (in Jam's page it never loaded the app: stuck
-        // on "…"). Discord then opens jamdiscord://…, registered for Jam, which hands it over.
-        if (url.startsWith("https://discord.com/oauth2/authorize") && AppLinks.register()) {
-            app.jam.desktop.shim.Shell.browse(url)
-            app.jam.desktop.shim.Toasts.show("Finish connecting Discord in your browser, then come back to Jam.", true)
-            return@post
-        }
         val v = open.value ?: WebView(DesktopApp.activity ?: DesktopApp.context).also { open.value = it }
         v.settings.javaScriptEnabled = true; v.settings.domStorageEnabled = true
         v.webViewClient = object : WebViewClient() {

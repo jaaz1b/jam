@@ -33,3 +33,7 @@ com/music/spotui/ui/theme/Theme.kt => ^(\s*)androidx\.compose\.ui\.platform\.Loc
 com/music/spotui/ui/components/Motion.kt => \.clickable\(source, indication = null, enabled = enabled, role = androidx\.compose\.ui\.semantics\.Role\.Button, onClick = onClick\) => .then(app.jam.desktop.studio.handPointer()).clickable(source, indication = app.jam.desktop.studio.HoverIndication, enabled = enabled, role = androidx.compose.ui.semantics.Role.Button, onClick = onClick)
 # The hand pointer over everything clickable in the app's pages (a mouse needs to see it).
 * => \.(clickable|combinedClickable)([ ({]) => .then(app.jam.desktop.studio.handPointer()).$1$2
+# Discord on Windows: the signed-in presence (Social SDK, as on Android; works with Discord in a
+# browser), else the Discord app's own (DiscordIpc) — never both.
+app/jam/android/Discord.kt => ^    fun onNowPlaying\(np: NowPlaying\?\) = push\(Presence\.build\(np\)\)$ =>     fun onNowPlaying(np: NowPlaying?) { val a = Presence.build(np); push(a); desktopIpc(a, state == State.CONNECTED) }
+app/jam/android/Discord.kt => ^    fun refresh\(\) \{ lastKey = null; push\(Presence\.build\(Player\.current\)\) \}$ =>     fun refresh() { lastKey = null; val a = Presence.build(Player.current); push(a); desktopIpc(a, state == State.CONNECTED) }

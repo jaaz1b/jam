@@ -255,6 +255,7 @@ class Page(private val view: WebView) {
     fun insertText(text: String) = input { it.fire("Input.insertText", json("text" to text)) }
 
     // ---- events
+    private val discordErrors = java.util.concurrent.ConcurrentHashMap<String, Int>()
     private fun client() = view.getWebViewClient()
 
     /** An address of an app's own scheme the page opens (once): to the client, as a link to follow. */
@@ -280,6 +281,7 @@ class Page(private val view: WebView) {
             "Network.responseReceived" -> {
                 val resp = p.getJSONObject("response"); val status = resp.optInt("status")
                 val req = requests[p.getString("requestId")] ?: return
+                if (status >= 400 && Regex("^https://(ptb\\.|canary\\.)?discord\\.com/api/(v\\d+/)?(oauth2|applications)").containsMatchIn(req.url.toString())) discordErrors[p.getString("requestId")] = status
                 if (status >= 400) {
                     val r = android.webkit.WebResourceResponse(resp.optString("mimeType"), null, status, resp.optString("statusText").ifEmpty { "Error" }, headers(resp.optJSONObject("headers")), null)
                     Desk.post { client()?.onReceivedHttpError(view, req, r) }
@@ -294,6 +296,11 @@ class Page(private val view: WebView) {
             "Network.loadingFinished" -> {
                 val id = p.getString("requestId")
                 val req = requests.remove(id) ?: return
+                // Discord's sign-in page answers a refusal by spinning ("…" for the app's name, then
+                // loading forever after Authorize): what Discord said, and what to change, shown.
+                discordErrors.remove(id)?.let { status ->
+                    cdp?.call("Network.getResponseBody", json("requestId" to id))?.thenAccept { r -> DiscordHelp.refused(req.url.toString(), status, r.optString("body")) }
+                }
                 // An OAuth "Authorize" answers with the app's own address (jamdiscord://…), which the
                 // page then opens: a browser would hand it to the app; here nothing would (Discord's
                 // sign-in stayed on "Authorizing"). The answer itself is read, and the app gets it.

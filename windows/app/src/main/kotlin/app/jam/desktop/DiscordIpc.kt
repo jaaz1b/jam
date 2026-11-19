@@ -1,7 +1,8 @@
-package app.jam.android
+package app.jam.desktop
 
-import android.content.Context
-import android.net.Uri
+import app.jam.android.Prefs
+import app.jam.android.RichActivity
+
 import android.os.Handler
 import android.os.Looper
 import org.json.JSONArray
@@ -11,84 +12,60 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 
 /**
- * Jam for Windows' Discord Rich Presence: through the Discord app on this PC (its local IPC, the
- * named pipe \\.\pipe\discord-ipc-N), as Discord's desktop presence works and as Jam's other PC app
- * did — no sign-in. (Jam for Android signs in with Discord's OAuth page and the Social SDK; on the
- * PC that page never loaded the application, "…", and stayed loading after Authorize.)
- * Same API as Android's Discord object: Settings, Presence and Player use it unchanged.
+ * The fallback of Jam for Windows' Discord presence: when Jam is not signed in to Discord (the
+ * Social SDK sign-in, Discord.kt, as on Android — which also works with Discord in a browser), the
+ * Discord app on this PC shows it through its local IPC (\\.\pipe\discord-ipc-N), no sign-in.
+ * Off while the signed-in presence runs, so there's never two.
  */
-object Discord {
-    const val REDIRECT_URI = "jamdiscord://oauth2/callback"
+object DiscordIpc {
     private const val MIN_GAP_MS = 2000L
     private const val RETRY_MS = 15_000L
 
     private val main = Handler(Looper.getMainLooper())
-    private lateinit var app: Context
-
-    enum class State { SIGNED_OUT, CONNECTING, CONNECTED, ERROR, DISABLED, NO_APP_ID }
-    @Volatile var state: State = State.SIGNED_OUT
-        private set
-    @Volatile var lastError: String? = null
-        private set
-    var onStateChanged: (() -> Unit)? = null
+    @Volatile private var connected = false
     @Volatile private var user: String? = null
-    fun username(): String? = user
+    fun username(): String? = user?.takeIf { connected }
 
     private fun appId(): String = Prefs.str("discordAppId").filter { it.isDigit() }
     private fun enabled(): Boolean = Prefs.bool("rpcEnabled")
+    /** The signed-in presence has it: this one stays out (and clears what it set). */
+    @Volatile private var standby = false
 
-    fun init(context: Context) {
-        app = context.applicationContext
-        main.post { reconnect() }
-    }
-
-    /** Nothing to sign in to on the PC: Jam connects to the Discord app. Null = no error to show. */
-    fun signIn(context: Context): String? {
-        if (appId().isEmpty()) return "Enter your Discord Application ID first."
-        reconnect()
-        return null
-    }
-
-    fun onCallback(uri: Uri) { reconnect() }
-
-    fun signOut() { close(); setState(State.SIGNED_OUT) }
-
-    private fun setState(s: State, error: String? = null) {
-        state = s; lastError = error
-        main.post { onStateChanged?.invoke() }
+    /** What should show, and whether the signed-in presence is showing it already. */
+    fun update(a: RichActivity?, signedIn: Boolean) = main.post {
+        standby = signedIn
+        if (signedIn || !enabled() || appId().isEmpty()) {
+            if (pipe != null) { desired = null; lastKey = null; flush(); close() }
+            main.removeCallbacks(retry)
+            return@post
+        }
+        desired = a
+        if (pipe == null) reconnectNow() else pushNow(a)
     }
 
     // ---------------------------------------------------------------------------------- the pipe
 
     private var pipe: RandomAccessFile? = null
     private var connectedId: String? = null
-    private val retry: Runnable = Runnable { reconnect() }
+    private val retry: Runnable = Runnable { reconnectNow() }
 
-    fun reconnect(): Unit { main.post { reconnectNow() } }
     private fun reconnectNow() {
         main.removeCallbacks(retry)
-        when {
-            !enabled() -> { close(); setState(State.DISABLED); return }
-            appId().isEmpty() -> { close(); setState(State.NO_APP_ID); return }
-        }
+        if (standby || !enabled() || appId().isEmpty()) return
         if (pipe != null && connectedId == appId()) { lastKey = null; flush(); return }
         close()
-        setState(State.CONNECTING)
         Thread({ connect(appId()) }, "jam-discord-connect").apply { isDaemon = true; start() }
     }
 
     private fun connect(id: String) {
         val p = (0..9).firstNotNullOfOrNull { i -> runCatching { RandomAccessFile("\\\\.\\pipe\\discord-ipc-$i", "rw") }.getOrNull() }
         if (p == null) {
-            main.post {
-                setState(State.ERROR, "Open the Discord app on this PC: Jam shows your status through it.")
-                main.postDelayed(retry, RETRY_MS)
-            }
+            main.post { main.postDelayed(retry, RETRY_MS) }
             return
         }
         runCatching { synchronized(io) { p.write(frame(0, JSONObject().put("v", 1).put("client_id", id).toString())) } }.onFailure {
             runCatching { p.close() }
-            main.post { setState(State.ERROR, "Discord did not answer: ${it.message}"); main.postDelayed(retry, RETRY_MS) }
+            main.post { main.postDelayed(retry, RETRY_MS) }
             return
         }
         main.post { pipe = p; connectedId = id }
@@ -117,26 +94,26 @@ object Discord {
                 val m = runCatching { JSONObject(String(body, Charsets.UTF_8)) }.getOrNull() ?: continue
                 when {
                     op == 2 -> { // CLOSE: a wrong application ID, mostly
-                        main.post { if (pipe === p) { close(); setState(State.ERROR, "Discord refused the connection: ${m.optString("message").ifBlank { "check the Application ID" }}") } }
+                        main.post { if (pipe === p) close() }
                         return
                     }
                     m.optString("evt") == "READY" -> {
                         val u = m.optJSONObject("data")?.optJSONObject("user")
                         user = u?.optString("global_name")?.takeIf { it.isNotBlank() && it != "null" } ?: u?.optString("username")
-                        main.post { if (pipe === p) { setState(State.CONNECTED); lastKey = null; flush() } }
+                        main.post { if (pipe === p) { connected = true; lastKey = null; flush() } }
                     }
-                    m.optString("evt") == "ERROR" -> main.post { lastError = m.optJSONObject("data")?.optString("message") }
+                    m.optString("evt") == "ERROR" -> Unit
                 }
             }
         } catch (_: Exception) {}
         main.post {
-            if (pipe === p) { close(); setState(State.ERROR, "Discord closed. Jam reconnects when it's open again."); main.postDelayed(retry, RETRY_MS) }
+            if (pipe === p) { close(); main.postDelayed(retry, RETRY_MS) }
         }
     }
 
     private fun close() {
         runCatching { pipe?.close() }
-        pipe = null; connectedId = null
+        pipe = null; connectedId = null; connected = false
     }
 
     private fun frame(op: Int, payload: String): ByteArray {
@@ -152,15 +129,9 @@ object Discord {
     private var lastSentAt = 0L
     private var pending: Runnable? = null
 
-    fun onNowPlaying(np: NowPlaying?) = push(Presence.build(np))
-
-    /** Settings changed: rebuild and resend. */
-    fun refresh() { lastKey = null; push(Presence.build(Player.current)) }
-
-    private fun push(a: RichActivity?) { main.post { pushNow(a) } }
     private fun pushNow(a: RichActivity?) {
         desired = a
-        if (state != State.CONNECTED) return
+        if (!connected) return
         val key = a?.key() ?: "null"
         val start = a?.startMs
         val seeked = start != null && lastStart != null && kotlin.math.abs(start - lastStart!!) > 3000
@@ -173,7 +144,7 @@ object Discord {
 
     private fun flush() {
         val p = pipe ?: return
-        if (state != State.CONNECTED) return
+        if (!connected) return
         val a = desired
         lastSentAt = System.currentTimeMillis()
         lastKey = a?.key() ?: "null"
@@ -194,7 +165,7 @@ object Discord {
         }
         val msg = JSONObject().put("cmd", "SET_ACTIVITY").put("args", args).put("nonce", java.util.UUID.randomUUID().toString())
         runCatching { synchronized(io) { p.write(frame(1, msg.toString())) } }.onFailure {
-            close(); setState(State.ERROR, "Discord closed. Jam reconnects when it's open again."); main.postDelayed(retry, RETRY_MS)
+            close(); main.postDelayed(retry, RETRY_MS)
         }
     }
 }

@@ -172,6 +172,14 @@ fun ActivityWindow(a: android.app.Activity, modifier: Modifier) {
             .then(if (app.jam.desktop.studio.Studio.pointer.value) Modifier.pointerHoverIcon(app.jam.desktop.studio.Cursors.arrow()) else Modifier)) {
             root?.let { ViewNode(it) }
             for (top in Windows.stack.toList()) ActivityLayer(top)
+            app.jam.desktop.shim.Notices.alert.value?.let { (title, text) ->
+                androidx.compose.material3.AlertDialog(
+                    onDismissRequest = { app.jam.desktop.shim.Notices.alert.value = null },
+                    title = { androidx.compose.material3.Text(title) },
+                    text = { androidx.compose.material3.Text(text) },
+                    confirmButton = { androidx.compose.material3.TextButton(onClick = { app.jam.desktop.shim.Notices.alert.value = null }) { androidx.compose.material3.Text("OK") } },
+                )
+            }
             WebSheet.Host()
             ToastHost(Modifier.align(Alignment.BottomCenter))
         }
