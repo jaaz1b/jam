@@ -86,6 +86,9 @@ object Intents {
             }
             cls != null && !cls.endsWith(".MainActivity") && isActivity(cls) -> Windows.openActivity(intent)
             cls != null && (cls.endsWith("MainActivity") || cls.startsWith("app.myspoti")) && data == null -> onAppIntent?.invoke(intent)
+            // Discord's sign-in (a Custom Tab on Android) stays in Jam: its answer (the jamdiscord://
+            // link, or why Discord refused) is read there. In the PC's browser it went nowhere.
+            data != null && data.toString().startsWith("https://discord.com/oauth2/authorize") -> app.jam.desktop.WebSheet.open(data.toString())
             data != null && data.scheme in setOf("http", "https", "mailto") -> Shell.browse(data.toString())
             data != null && data.scheme == "file" -> Files.file(data)?.let { Shell.open(it) }
             data != null && data.scheme in setOf("spotify", "myspoti", "jam") -> onAppIntent?.invoke(intent)
