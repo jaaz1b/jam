@@ -21,7 +21,7 @@ object Presence {
     /** "Listening to …": the App name setting ({source} = the player's name), else the player's name. */
     fun appName(np: NowPlaying?): String {
         val src = np?.sourceName?.ifEmpty { null } ?: "Apple Music"
-        return Prefs.str("appName").trim().replace(Regex("\\{source}", RegexOption.IGNORE_CASE), src).trim().ifEmpty { src }
+        return Prefs.str("appName").trim().replace("{source}", src, ignoreCase = true).trim().ifEmpty { src }
     }
 
     private val TOKEN = Regex("\\{(title|artist|album|app|source)\\}", RegexOption.IGNORE_CASE)
