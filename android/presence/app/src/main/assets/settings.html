@@ -66,7 +66,7 @@
   .chip:hover { border-color:var(--accent); }
   .status { display:inline-flex; align-items:center; gap:7px; font-size:13px; color:var(--muted); }
   .dot { width:8px; height:8px; border-radius:50%; background:var(--faint); flex:none; }
-  .dot.connected { background:var(--ok); } .dot.connecting { background:var(--warn); } .dot.error, .dot.no-client-id { background:var(--bad); }
+  .dot.connected, .dot.idle { background:var(--ok); } .dot.connecting { background:var(--warn); } .dot.error, .dot.no-client-id { background:var(--bad); }
   ol { margin:10px 0 0; padding-left:20px; color:var(--muted); font-size:13px; }
   ol li { margin:3px 0; }
   a { color:#b79cff; cursor:pointer; text-decoration:none; } a:hover { text-decoration:underline; }
@@ -233,7 +233,9 @@
     <div class="row gated"><span class="name">Hide details</span><label class="switch"><input type="checkbox" data-k="hideDetails"><span class="slider"></span></label>
       <span class="desc">Say only that music is playing. No title, artist, album, artwork, progress bar or buttons leave your phone.</span></div>
     <div class="row gated"><span class="name">Stay connected</span><label class="switch"><input type="checkbox" data-k="keepAlive"><span class="slider"></span></label>
-      <span class="desc">Keeps a quiet notification up so Android doesn't close the Discord connection in the background. Without it, your status can stop updating while the screen is off.</span></div>
+      <span class="desc">While a song is on Discord, a quiet notification keeps Android from closing the connection with the screen off. It goes away when the music stops.</span></div>
+    <div class="row gated"><span class="name">Stay online</span><label class="switch"><input type="checkbox" data-k="stayOnline"><span class="slider"></span></label>
+      <span class="desc">Keep the Discord connection open when nothing's playing, so you always look online. Off: Jam Presence connects when music starts and lets go 2 minutes after it stops, which is much easier on your battery.</span></div>
   </div>
 
   <div class="section gated">
@@ -379,6 +381,7 @@
   const NOTE = '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" style="flex:none"><path d="M12 3v10.55A4 4 0 1 0 14 17V7h4V3h-6z"/></svg>';
   const LABELS = {
     connected: 'Connected', connecting: 'Connecting to Discord…', disabled: 'Off', 'signed-out': 'Not signed in',
+    idle: 'Signed in · connects when music plays',
     'no-client-id': 'Needs an Application ID (see Discord setup below)', error: 'Problem',
   };
 
@@ -445,6 +448,7 @@
     $('dot').className = 'dot ' + key;
     let text = LABELS[key] || key;
     if (key === 'connected' && s.user) text = 'Connected as ' + s.user;
+    if (key === 'idle' && s.user) text = 'Signed in as ' + s.user + ' · connects when music plays';
     if (key === 'connecting' && s.user) text = 'Connecting as ' + s.user + '…';
     $('statusText').textContent = text;
     $('statusErr').textContent = s.error || '';
@@ -508,6 +512,7 @@
 
     const notes = [];
     if (p.sample) notes.push('Showing a sample song. Play something to preview it for real.');
+    if (p.coverNote) notes.push(p.coverNote);
     if (img && !/^https:/i.test(img)) notes.push(`The artwork here is a stand-in for the “${img}” Art Asset.`);
     if (!p.sample && a && !(a.buttons || []).length && settings.button1Enabled) notes.push('No song link for this player, so button 1 is left out. Give it a link above to always show it.');
     $('pNote').textContent = notes.join(' ');

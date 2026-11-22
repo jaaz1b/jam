@@ -21,6 +21,7 @@ object Prefs {
           "discordAppId": "",
           "players": ["$APPLE_MUSIC"],
           "keepAlive": true,
+          "stayOnline": false,
           "showWhenPaused": false,
           "hideDetails": false,
           "statusDisplay": "line1",
@@ -94,7 +95,7 @@ object Prefs {
 
     @Synchronized
     fun resetPresence() {
-        val keep = setOf("discordAppId", "rpcEnabled", "players", "keepAlive")
+        val keep = setOf("discordAppId", "rpcEnabled", "players", "keepAlive", "stayOnline")
         val all = all()
         DEFAULTS.keys().forEach { k -> if (k !in keep) all.put(k, DEFAULTS.get(k)) }
         sp.edit().putString("settings", all.toString()).apply()

@@ -14,8 +14,8 @@ import android.util.Log
 
 /**
  * "Stay connected": a quiet ongoing notification that keeps Jam Presence running, so Android doesn't
- * cut its Discord connection while the screen is off. Runs while Rich Presence is on, you're signed
- * in and notification access is allowed.
+ * cut its Discord connection while the screen is off. Runs only while that connection is open (a song
+ * is showing, or "Stay online"), so not at all while nothing plays.
  */
 class KeepAliveService : Service() {
     companion object {
@@ -23,8 +23,10 @@ class KeepAliveService : Service() {
         private const val ID = 1
         @Volatile private var running: KeepAliveService? = null
 
+        /** Only while connected to Discord (a song is showing, or "Stay online"): nothing to keep alive otherwise. */
         private fun wanted(context: Context): Boolean =
-            Prefs.bool("keepAlive") && Prefs.bool("rpcEnabled") && Prefs.secret("discord.access") != null && MediaListener.allowed(context)
+            Prefs.bool("keepAlive") && Prefs.bool("rpcEnabled") && Prefs.secret("discord.access") != null && MediaListener.allowed(context) &&
+                (Discord.state == Discord.State.CONNECTED || Discord.state == Discord.State.CONNECTING)
 
         /** Starts or stops the service to match the settings. Safe to call from anywhere. */
         fun sync(context: Context) {

@@ -21,6 +21,8 @@ data class NowPlaying(
     val sourceId: String,
     /** The player's name, e.g. Apple Music. */
     val sourceName: String,
+    /** How the cover was found (or why not), for the settings preview. */
+    val coverNote: String = "",
     val readAt: Long = System.currentTimeMillis(),
 ) {
     fun positionNow(): Double? = position?.let { if (playing) it + (System.currentTimeMillis() - readAt) / 1000.0 else it }
@@ -55,7 +57,7 @@ object Player {
     private fun same(a: NowPlaying?, b: NowPlaying?): Boolean {
         if (a == null || b == null) return a == b
         if (a.title != b.title || a.artist != b.artist || a.album != b.album || a.artwork != b.artwork || a.playing != b.playing ||
-            a.duration != b.duration || a.url != b.url || a.sourceId != b.sourceId) return false
+            a.duration != b.duration || a.url != b.url || a.sourceId != b.sourceId || a.coverNote != b.coverNote) return false
         val pa = a.positionNow(); val pb = b.positionNow()
         return pa == null || pb == null || kotlin.math.abs(pa - pb) < 3.0
     }

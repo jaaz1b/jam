@@ -29,7 +29,7 @@ class MediaListener : NotificationListenerService() {
             NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
 
         /** Settings changed (players, cover lookup): choose again. */
-        fun refresh() { instance?.let { it.main.post { it.pick() } } }
+        fun refresh() { instance?.let { it.main.post { it.schedulePick(0) } } }
 
         /** The packages with a media session right now. */
         fun activePlayers(): Set<String> = instance?.tracked?.values?.map { it.c.packageName }?.toSet() ?: emptySet()
@@ -39,21 +39,35 @@ class MediaListener : NotificationListenerService() {
     private val tracked = HashMap<MediaSession.Token, Tracked>()
     private var msm: MediaSessionManager? = null
     private val component by lazy { ComponentName(this, MediaListener::class.java) }
-    private val pickLater = Runnable { pick() }
+    private val pickNow = Runnable { pick() }
+    private val names = HashMap<String, String>()
+
+    /**
+     * Players report position and state changes in bursts (and some every second): they're
+     * gathered into one look a moment later instead of one per event.
+     */
+    private fun schedulePick(delay: Long = 400) {
+        main.removeCallbacks(pickNow)
+        main.postDelayed(pickNow, delay)
+    }
 
     private inner class Tracked(val c: MediaController) : MediaController.Callback() {
         /** When this player last started playing or changed song (the newest playing one wins). */
         var lastActive = SystemClock.elapsedRealtime()
         private var lastTitle: String? = c.metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
 
+        private var lastState = c.playbackState?.state
+
         override fun onPlaybackStateChanged(state: PlaybackState?) {
-            if (state?.state == PlaybackState.STATE_PLAYING) lastActive = SystemClock.elapsedRealtime()
-            pick()
+            val st = state?.state
+            if (st == PlaybackState.STATE_PLAYING && lastState != st) lastActive = SystemClock.elapsedRealtime()
+            lastState = st
+            schedulePick()
         }
         override fun onMetadataChanged(metadata: MediaMetadata?) {
             val t = metadata?.getString(MediaMetadata.METADATA_KEY_TITLE)
             if (t != lastTitle) { lastTitle = t; lastActive = SystemClock.elapsedRealtime() }
-            pick()
+            schedulePick()
         }
         override fun onSessionDestroyed() { main.post { rescan() } }
     }
@@ -97,12 +111,12 @@ class MediaListener : NotificationListenerService() {
             tracked[token] = t
             Prefs.addSeen(c.packageName)
         }
-        pick()
+        schedulePick(0)
     }
 
     /** Chooses the player to show and reports its song. */
     private fun pick() {
-        main.removeCallbacks(pickLater)
+        main.removeCallbacks(pickNow)
         val enabled = Prefs.players()
         val candidates = tracked.values.filter { it.c.packageName in enabled && title(it.c.metadata).isNotEmpty() }
         val playing = candidates.filter { isPlaying(it.c.playbackState) }
@@ -113,24 +127,41 @@ class MediaListener : NotificationListenerService() {
         val md = c.metadata ?: run { Player.update(null); return }
         val pkg = c.packageName
         val title = title(md)
-        val artist = (md.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: md.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
+        var artist = (md.getString(MediaMetadata.METADATA_KEY_ARTIST) ?: md.getString(MediaMetadata.METADATA_KEY_ALBUM_ARTIST)
             ?: md.getText(MediaMetadata.METADATA_KEY_DISPLAY_SUBTITLE)?.toString() ?: "").trim()
-        val album = (md.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "").trim()
+        var album = (md.getString(MediaMetadata.METADATA_KEY_ALBUM) ?: "").trim()
+        // Some players put "Artist — Album" in the artist line.
+        Regex("\\s+[—–]\\s+").find(artist)?.let { m ->
+            val rest = artist.substring(m.range.last + 1).trim()
+            if (album.isEmpty() || Covers.norm(rest) == Covers.norm(album)) { if (album.isEmpty()) album = rest; artist = artist.substring(0, m.range.first).trim() }
+        }
         val ownArt = listOf(MediaMetadata.METADATA_KEY_ART_URI, MediaMetadata.METADATA_KEY_ALBUM_ART_URI, MediaMetadata.METADATA_KEY_DISPLAY_ICON_URI)
             .mapNotNull { md.getString(it) }.firstOrNull { it.startsWith("https://") && it.length <= 512 }
 
-        // Apple's catalog: a cover Discord can load, and the song's Apple Music link.
+        // A cover Discord can load and the song's link, from the music catalogs (see Covers).
         var found: Covers.Found? = null
-        if (Prefs.bool("lookupCovers") && title.isNotEmpty()) {
-            val k = Covers.key(title, artist, album)
-            found = Covers.cached(k)
-            if (found == null) {
-                Covers.fetch(title, artist, album) { pick() }
-                // Wait a moment for it (one Discord update with the cover instead of two), not longer.
-                val since = Covers.pendingSince(k)
-                if (since != null && System.currentTimeMillis() - since < 2500) { main.postDelayed(pickLater, 2600); return }
+        var coverNote = ""
+        if (ownArt == null && Prefs.bool("lookupCovers") && title.isNotEmpty()) {
+            // Apple Music's own catalog id, when its session gives one, finds the exact song.
+            val appleId = md.getString(MediaMetadata.METADATA_KEY_MEDIA_ID)?.takeIf { pkg == Prefs.APPLE_MUSIC && Regex("^\\d{5,}$").matches(it) }
+            val q = Covers.Query(title, artist, album, appleId)
+            when (val st = Covers.state(q)) {
+                is Covers.State.Known -> { found = st.found; coverNote = if (st.found.hit) "Cover: ${st.found.source}" else "No cover found for this song in Apple Music's or Deezer's catalog." }
+                is Covers.State.Pending -> {
+                    // Wait a moment for it (one Discord update with the cover instead of two), not longer.
+                    if (System.currentTimeMillis() - st.since < 3000) { schedulePick(3100); return }
+                    coverNote = "Still looking for the cover…"
+                }
+                is Covers.State.Failed -> {
+                    coverNote = "Couldn't reach the music catalogs for the cover; trying again in a few minutes."
+                    main.postDelayed({ schedulePick(0) }, st.retryAt - System.currentTimeMillis() + 1000)
+                }
+                Covers.State.Unknown -> {
+                    Covers.fetch(q) { schedulePick(0) }
+                    schedulePick(3100); return
+                }
             }
-        }
+        } else if (ownArt != null) coverNote = "Cover: from the player"
 
         val state = c.playbackState
         val playingNow = isPlaying(state)
@@ -145,7 +176,8 @@ class MediaListener : NotificationListenerService() {
             duration = if (durMs > 0) durMs / 1000.0 else null,
             url = Players.link(pkg, title, artist, found?.url),
             sourceId = pkg,
-            sourceName = Players.name(this, pkg),
+            sourceName = names.getOrPut(pkg) { Players.name(this, pkg) },
+            coverNote = coverNote,
         )
         Player.update(np)
     }

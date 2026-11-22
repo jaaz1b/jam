@@ -2,6 +2,9 @@ package app.jam.presence
 
 import android.content.Context
 import android.content.Intent
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -40,6 +43,10 @@ object Discord {
     private const val SCOPES = "openid sdk.social_layer_presence"
     private const val GATEWAY = "wss://gateway.discord.gg/?v=10&encoding=json"
     private const val MIN_GAP_MS = 4000L
+    /** Nothing to show: the connection closes after this long (a pause or the next song in between keeps it). */
+    private const val IDLE_GRACE_MS = 2 * 60_000L
+    /** A paused song stays on the card at most this long ("Show while paused"). */
+    private const val PAUSED_MAX_MS = 10 * 60_000L
 
     private val main = Handler(Looper.getMainLooper())
     private val io = Executors.newSingleThreadExecutor()
@@ -47,7 +54,8 @@ object Discord {
     private lateinit var app: Context
 
     // ---- state visible to Settings
-    enum class State { SIGNED_OUT, CONNECTING, CONNECTED, ERROR, DISABLED, NO_APP_ID }
+    /** IDLE: signed in, not connected because nothing is playing (battery). */
+    enum class State { SIGNED_OUT, CONNECTING, CONNECTED, IDLE, ERROR, DISABLED, NO_APP_ID }
     @Volatile var state: State = State.SIGNED_OUT
         private set
     @Volatile var lastError: String? = null
@@ -57,8 +65,27 @@ object Discord {
 
     fun init(context: Context) {
         app = context.applicationContext
+        // Back online: connect then (if there's something to show), instead of retrying while offline.
+        runCatching {
+            app.getSystemService(ConnectivityManager::class.java).registerDefaultNetworkCallback(object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    main.post { if (ws == null && reconnectPending == null && state != State.CONNECTING && wanted()) { attempts = 0; reconnect() } }
+                }
+            })
+        }
         main.post { reconnect() }
     }
+
+    private fun online(): Boolean = runCatching {
+        val cm = app.getSystemService(ConnectivityManager::class.java)
+        cm.getNetworkCapabilities(cm.activeNetwork)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
+    }.getOrDefault(true)
+
+    /** Until then the connection is kept without a song (checking a new sign-in). */
+    private var holdUntil = 0L
+
+    /** Whether the connection should be open: something to show, or "Stay online". */
+    private fun wanted(): Boolean = desired != null || Prefs.bool("stayOnline") || System.currentTimeMillis() < holdUntil
 
     private fun setState(s: State, err: String? = null) {
         state = s
@@ -124,7 +151,7 @@ object Discord {
             val err2 = exchange(FormBody.Builder()
                 .add("client_id", appId()).add("grant_type", "authorization_code")
                 .add("code", code).add("redirect_uri", REDIRECT_URI).add("code_verifier", verifier).build())
-            if (err2 != null) setState(State.ERROR, err2) else main.post { reconnect() }
+            if (err2 != null) setState(State.ERROR, err2) else main.post { holdUntil = System.currentTimeMillis() + 20_000; reconnect() }
         }
     }
 
@@ -181,7 +208,9 @@ object Discord {
     private var wsGen = 0
     private var seq: Int? = null
     private var heartbeat: Runnable? = null
+    private var acked = true
     private var ready = false
+    private var idleTimer: Runnable? = null
     private var attempts = 0
     private var reconnectPending: Runnable? = null
 
@@ -192,6 +221,8 @@ object Discord {
             !Prefs.bool("rpcEnabled") -> setState(State.DISABLED)
             appId().isEmpty() -> setState(State.NO_APP_ID)
             Prefs.secret("discord.access") == null -> setState(State.SIGNED_OUT)
+            !wanted() -> setState(State.IDLE)
+            !online() -> setState(State.CONNECTING) // the network callback connects when it's back
             else -> {
                 setState(State.CONNECTING)
                 io.execute {
@@ -240,9 +271,11 @@ object Discord {
                 }
                 setState(State.CONNECTED)
                 lastKey = null
-                push(Presence.build(Player.current))
+                push(desired)
+                if (desired == null) scheduleIdle(if (System.currentTimeMillis() < holdUntil) holdUntil - System.currentTimeMillis() else IDLE_GRACE_MS)
             }
             1 -> send(1, seq) // heartbeat request
+            11 -> acked = true // heartbeat ACK
             7 -> { disconnect(); scheduleReconnect() } // reconnect request
             9 -> { disconnect(); scheduleReconnect(2000) } // invalid session
         }
@@ -250,8 +283,14 @@ object Discord {
 
     private fun startHeartbeat(interval: Long) {
         heartbeat?.let { main.removeCallbacks(it) }
+        acked = true
         val r = object : Runnable {
-            override fun run() { send(1, seq); main.postDelayed(this, interval) }
+            override fun run() {
+                // No answer to the last one: the connection is dead (network changed). Start over.
+                if (!acked) { Log.w(TAG, "no heartbeat ACK"); disconnect(); if (wanted()) scheduleReconnect() else setState(State.IDLE); return }
+                acked = false
+                send(1, seq); main.postDelayed(this, interval)
+            }
         }
         heartbeat = r
         main.postDelayed(r, (interval * Math.random()).toLong())
@@ -267,13 +306,18 @@ object Discord {
                 main.post { if (err == null && Prefs.secret("discord.access") != null) open() else { signOutLocal(); setState(State.ERROR, err ?: "Discord sign-in expired. Sign in again.") } }
             }
             4013, 4014 -> setState(State.ERROR, "Discord refused presence for this app ($code). Is the Social SDK enabled for it?")
-            else -> { if (!wasReady && attempts >= 3) setState(State.ERROR, "Can't connect to Discord ($code ${reason.take(80)})"); scheduleReconnect() }
+            else -> when {
+                !wanted() -> setState(State.IDLE)
+                else -> { if (!wasReady && attempts >= 3 && online()) setState(State.ERROR, "Can't connect to Discord ($code ${reason.take(80)})"); scheduleReconnect() }
+            }
         }
     }
 
     private fun scheduleReconnect(min: Long = 0) {
         reconnectPending?.let { main.removeCallbacks(it) }
         if (!Prefs.bool("rpcEnabled") || Prefs.secret("discord.access") == null) return
+        if (!wanted()) { setState(State.IDLE); return }
+        if (!online()) { setState(State.CONNECTING); return } // the network callback connects when it's back
         attempts++
         val delay = maxOf(min, minOf(64_000L, 1000L shl minOf(attempts, 6)))
         val r = Runnable { reconnectPending = null; setState(State.CONNECTING); open() }
@@ -283,6 +327,7 @@ object Discord {
 
     private fun disconnect() {
         wsGen++
+        idleTimer?.let { main.removeCallbacks(it) }; idleTimer = null
         heartbeat?.let { main.removeCallbacks(it) }; heartbeat = null
         reconnectPending?.let { main.removeCallbacks(it) }; reconnectPending = null
         ws?.close(1000, null); ws = null
@@ -299,10 +344,43 @@ object Discord {
     private var desired: RichActivity? = null
     private val assetCache = HashMap<String, String>()
 
-    fun onNowPlaying(np: NowPlaying?) = push(Presence.build(np))
+    private var pausedSince = 0L
+    private val pausedOver = Runnable { onNowPlaying(Player.current) }
+
+    fun onNowPlaying(np: NowPlaying?) {
+        var a = Presence.build(np)
+        main.removeCallbacks(pausedOver)
+        if (a != null && np != null && !np.playing) {
+            val now = System.currentTimeMillis()
+            if (pausedSince == 0L) pausedSince = now
+            if (now - pausedSince >= PAUSED_MAX_MS) a = null else main.postDelayed(pausedOver, pausedSince + PAUSED_MAX_MS - now + 500)
+        } else if (np?.playing != false) pausedSince = 0L
+        show(a)
+    }
 
     /** Settings changed: rebuild and resend. */
-    fun refresh() { lastKey = null; push(Presence.build(Player.current)) }
+    fun refresh() { lastKey = null; onNowPlaying(Player.current) }
+
+    private fun show(a: RichActivity?) {
+        push(a)
+        if (a != null) {
+            idleTimer?.let { main.removeCallbacks(it) }; idleTimer = null
+            // Not connected (nothing was playing): connect now.
+            if (ws == null && reconnectPending == null && state != State.CONNECTING &&
+                Prefs.bool("rpcEnabled") && appId().isNotEmpty() && Prefs.secret("discord.access") != null) { attempts = 0; reconnect() }
+        } else if (ws != null) scheduleIdle(IDLE_GRACE_MS)
+    }
+
+    /** Close the connection after [delay] if there's still nothing to show (and "Stay online" is off). */
+    private fun scheduleIdle(delay: Long) {
+        if (Prefs.bool("stayOnline") || idleTimer != null) return
+        val r = Runnable {
+            idleTimer = null
+            if (!wanted()) { Log.i(TAG, "nothing playing: disconnecting to save battery"); disconnect(); setState(State.IDLE) }
+        }
+        idleTimer = r
+        main.postDelayed(r, maxOf(1000L, delay))
+    }
 
     private fun push(a: RichActivity?) {
         desired = a

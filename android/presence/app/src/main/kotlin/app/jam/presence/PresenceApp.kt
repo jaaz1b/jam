@@ -7,6 +7,7 @@ class PresenceApp : Application() {
         super.onCreate()
         Prefs.init(this)
         Player.init(this)
+        Covers.init(this)
         Discord.init(this)
     }
 }

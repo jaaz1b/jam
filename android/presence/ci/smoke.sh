@@ -35,7 +35,35 @@ if grep -q "FATAL EXCEPTION" "$OUT/logcat.txt" && grep -A3 "FATAL EXCEPTION" "$O
   echo "CRASH"; fail=1
 fi
 grep -q "Apple Music: Espresso · Sabrina Carpenter (playing)" "$OUT/presence-log.txt" && echo "OK: song picked up" || { echo "MISSING: song not picked up"; fail=1; }
-grep -q "art=https://" "$OUT/presence-log.txt" && echo "OK: cover found" || echo "WARN: no cover (catalog lookup)"
+grep -q "art=https://" "$OUT/presence-log.txt" && echo "OK: cover found" || { echo "MISSING: no cover"; fail=1; }
 grep -q "link=https://music.apple.com/" "$OUT/presence-log.txt" && echo "OK: Apple Music link" || echo "WARN: no song link"
 grep -qi "Espresso" "$OUT/3-preview.xml" && echo "OK: preview shows the song" || echo "WARN: preview text not in the UI dump"
+
+# Cover finding on harder songs: featured artists, remasters, "Artist — Album" in the artist line,
+# accents, non-Latin titles, singles. One at a time, as a player would change songs.
+songs=(
+  "Die With A Smile|Lady Gaga & Bruno Mars|Die With A Smile - Single"
+  "luther (with sza)|Kendrick Lamar & SZA|GNX"
+  "Bohemian Rhapsody (Remastered 2011)|Queen|A Night At The Opera (2011 Remaster)"
+  "DtMF|Bad Bunny — DeBÍ TiRAR MáS FOToS|"
+  "SPECIALZ|King Gnu|SPECIALZ - Single"
+  "Blinding Lights|The Weeknd|After Hours"
+  "BIRDS OF A FEATHER|Billie Eilish|HIT ME HARD AND SOFT"
+  "Pink Pony Club|Chappell Roan|The Rise and Fall of a Midwest Princess"
+  "APT.|ROSÉ & Bruno Mars|APT. - Single"
+  "Nights|Frank Ocean|Blonde"
+  "Je te laisserai des mots|Patrick Watson|Wooden Arms"
+  "Despechá|ROSALÍA|MOTOMAMI +"
+)
+for line in "${songs[@]}"; do
+  IFS='|' read -r t a al <<< "$line"
+  adb shell am start -S -W -n com.apple.android.music/app.jam.presence.fakeplayer.PlayerActivity \
+    --es title "'$t'" --es artist "'$a'" --es album "'$al'" >/dev/null
+  sleep 9
+done
+adb logcat -d | grep "JamPresence: cover for" | tee "$OUT/covers.txt"
+found=$(grep -c ": found" "$OUT/covers.txt"); total=$(grep -c "cover for" "$OUT/covers.txt")
+echo "COVERS: $found of $total found"
+adb logcat -d > "$OUT/logcat-all.txt"
+if grep -A3 "FATAL EXCEPTION" "$OUT/logcat-all.txt" | grep -q "$PKG"; then echo "CRASH (cover songs)"; fail=1; fi
 exit $fail

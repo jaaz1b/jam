@@ -113,6 +113,7 @@ class SettingsActivity : Activity() {
     private fun status(): JSONObject {
         val st = when (Discord.state) {
             Discord.State.CONNECTED -> "connected"
+            Discord.State.IDLE -> "idle"
             Discord.State.CONNECTING -> "connecting"
             Discord.State.ERROR -> "error"
             Discord.State.DISABLED -> "disabled"
@@ -135,7 +136,7 @@ class SettingsActivity : Activity() {
         .put("notifications", notificationsAllowed())
         .put("battery", batteryFree())
         .put("appleMusic", Players.installed(this, Prefs.APPLE_MUSIC))
-        .put("discord", Discord.state == Discord.State.CONNECTED)
+        .put("discord", Discord.state == Discord.State.CONNECTED || Discord.state == Discord.State.IDLE)
         .put("signedIn", Prefs.secret("discord.access") != null)
 
     private fun players(): JSONObject {
@@ -185,6 +186,7 @@ class SettingsActivity : Activity() {
             .put("source", np.sourceName)
             .put("activity", act)
             .put("memberText", member?.let { "Listening to $it" } ?: JSONObject.NULL)
+            .put("coverNote", if (real != null && Prefs.bool("showAlbumArt")) real.coverNote else "")
     }
 
     private fun sanitize(patch: JSONObject): JSONObject {
@@ -210,9 +212,9 @@ class SettingsActivity : Activity() {
 
         @JavascriptInterface fun saveSettings(json: String): String {
             val patch = sanitize(runCatching { JSONObject(json) }.getOrDefault(JSONObject()))
-            val before = Prefs.str("discordAppId") to Prefs.bool("rpcEnabled")
+            val before = Triple(Prefs.str("discordAppId"), Prefs.bool("rpcEnabled"), Prefs.bool("stayOnline"))
             Prefs.set(patch)
-            val after = Prefs.str("discordAppId") to Prefs.bool("rpcEnabled")
+            val after = Triple(Prefs.str("discordAppId"), Prefs.bool("rpcEnabled"), Prefs.bool("stayOnline"))
             main.post {
                 if (before.first != after.first) Discord.signOut() // tokens belong to the old application
                 if (before != after) Discord.reconnect() else Discord.refresh()
